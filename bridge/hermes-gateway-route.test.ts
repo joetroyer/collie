@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { AuditLog } from "./audit.ts";
 import type { JsonValue } from "./json.ts";
 import { HermesGatewaySender, type HermesGatewayRpc } from "./hermes-gateway.ts";
-import { replyThroughProtocol, type ReplySendContext } from "./server.ts";
+import { replyThroughProtocol, sendRoute, type ReplySendContext, type SendRouteRuntime } from "./server.ts";
 
 const SID = "local-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -49,6 +49,43 @@ const described = { profile_id: "/profiles/default", instance_id: "owner-1" };
 const resumed = { session_id: SID, running: false, execution_generation: 1 };
 
 describe("Hermes reply route", () => {
+  test("uses the canonical gateway for the phone's local send route", async () => {
+    const fake = gateway({
+      "runtime.describe": described,
+      "session.resume": resumed,
+      "prompt.submit": { status: "started" },
+    });
+    const fallback = { calls: 0 };
+    const send = {
+      handle: async () => {
+        fallback.calls += 1;
+        return { offers: [] };
+      },
+    };
+    const runtime: SendRouteRuntime = {
+      name: "main",
+      herdr: {},
+      hermesGateway: fake.sender,
+      // SAFETY: sendRoute reaches handle() only when the gateway asks for classic fallback.
+      send: send as never,
+      engine: {
+        current: () => ({ agents: [{ paneId: "%1", agent: "hermes", agentSession: { kind: "id" as const, value: SID } }] }),
+        noteInput() {},
+        pokeNow() {},
+      },
+    };
+
+    const response = await sendRoute(
+      runtime,
+      { id: "hermes-local-0001", pane: "%1", text: "run local tests", mode: "send" },
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ receipt: { outcome: "sent", profileId: "hermes-gateway-v1" } });
+    expect(fallback.calls).toBe(0);
+  });
+
   test("uses the canonical gateway and does not touch the screen protocol", async () => {
     const fake = gateway({
       "runtime.describe": described,

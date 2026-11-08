@@ -3039,7 +3039,7 @@ export function startServer(opts: {
         } catch {
           body = undefined;
         }
-        return sendRoute(rt, body, { audit, device: whois(req).device, redact: cfg.redact, acceptEncoding: req.headers.get("accept-encoding") });
+        return sendRoute({ ...rt, hermesGateway }, body, { audit, device: whois(req).device, redact: cfg.redact, acceptEncoding: req.headers.get("accept-encoding") });
       }
       // `DELETE /api/send/<id>?session=<name>&pane=<id>` (M56 spec 15): the Cancel on a queued row. A held
       // request ends `cancelled`, an ended row is dismissed, one going out now is refused `busy`.
@@ -5653,6 +5653,51 @@ export function replySendOf(rt: Pick<SendRouteRuntime, "send" | "engine">): Repl
   };
 }
 
+async function hermesGatewayAnswer(
+  gateway: HermesGatewaySender | undefined,
+  pane: HermesGatewayPane | null,
+  request: SendRequest,
+  session: string,
+  paneId: string,
+  harness: string,
+): Promise<SendAnswer | null> {
+  if (gateway === undefined || pane === null || request.mode !== "send") return null;
+  const result = await tryHermesGatewaySend({
+    pane,
+    requestId: request.id,
+    text: request.text,
+    mode: request.when === "steer" ? "steer" : "send",
+    send: (candidate) => gateway.send(candidate),
+  });
+  if (result === null || result.kind === "fallback") return null;
+  const outcome = result.kind === "steered" ? "steered" : result.kind === "unknown" ? "unknown" : "sent";
+  const receiptBase = {
+    requestId: request.id,
+    session,
+    paneId,
+    paneGeneration: `hermes:${pane.agentSession?.value ?? paneId}`,
+    harness,
+    version: null,
+    profileId: "hermes-gateway-v1",
+    profileStatus: null,
+    textHash: new Bun.CryptoHasher("sha256").update(request.text).digest("hex"),
+    textLength: request.text.length,
+    s0: null,
+    s1: null,
+    s2: null,
+    gapsMs: {},
+    keys: [],
+    outcome,
+    acknowledged: request.id,
+  } as const;
+  const receipt = result.kind === "sent" && result.queued
+    ? { ...receiptBase, queued: true as const }
+    : result.kind === "unknown"
+      ? { ...receiptBase, reason: "no_evidence" as const, detail: result.reason }
+      : receiptBase;
+  return result.kind === "unknown" ? { receipt, offers: [], detail: result.reason } : { receipt, offers: [] };
+}
+
 export async function replyThroughProtocol(
   send: ReplySendContext,
   paneId: string,
@@ -5675,46 +5720,7 @@ export async function replyThroughProtocol(
   // A request id the caller minted is the phone's, on a crew member's pane (M56 spec 06): a person's
   // send, which may steer (M69). A caller that names no id is not the phone and never steers.
   const sendRequest: SendRequest = fields.id === undefined ? asked : { ...asked, fromPhone: true };
-  let answer: SendAnswer | null = null;
-  const gateway = send.hermesGateway;
-  const pane = send.paneOf?.(paneId) ?? null;
-  if (gateway !== undefined && pane !== null && sendRequest.mode === "send") {
-    const result = await tryHermesGatewaySend({
-      pane,
-      requestId: sendRequest.id,
-      text: sendRequest.text,
-      mode: sendRequest.when === "steer" ? "steer" : "send",
-      send: (candidate) => gateway.send(candidate),
-    });
-    if (result !== null && result.kind !== "fallback") {
-      const outcome = result.kind === "steered" ? "steered" : result.kind === "unknown" ? "unknown" : "sent";
-      const receiptBase = {
-        requestId: sendRequest.id,
-        session,
-        paneId: target,
-        paneGeneration: `hermes:${pane.agentSession?.value ?? target}`,
-        harness,
-        version: null,
-        profileId: "hermes-gateway-v1",
-        profileStatus: null,
-        textHash: new Bun.CryptoHasher("sha256").update(words).digest("hex"),
-        textLength: words.length,
-        s0: null,
-        s1: null,
-        s2: null,
-        gapsMs: {},
-        keys: [],
-        outcome,
-        acknowledged: sendRequest.id,
-      } as const;
-      const receipt = result.kind === "sent" && result.queued
-        ? { ...receiptBase, queued: true as const }
-        : result.kind === "unknown"
-          ? { ...receiptBase, reason: "no_evidence" as const, detail: result.reason }
-          : receiptBase;
-      answer = result.kind === "unknown" ? { receipt, offers: [], detail: result.reason } : { receipt, offers: [] };
-    }
-  }
+  let answer = await hermesGatewayAnswer(send.hermesGateway, send.paneOf?.(paneId) ?? null, sendRequest, session, target, harness);
   if (answer === null) {
     if (send.protocol === undefined) return text(REPLY_OFF_TEXT, 409);
     answer = await send.protocol.handle(sendRequest, { session, paneId: target, harness });
@@ -8596,8 +8602,9 @@ export interface SendRouteRuntime {
   readonly driver?: ProgramDriver;
   readonly name: string;
   readonly herdr: Pick<MuxAdapter, "controlTurn">;
+  readonly hermesGateway?: HermesGatewaySender;
   readonly engine: {
-    current(): { readonly agents: readonly Pick<AgentView, "paneId" | "agent">[]; readonly shellPanes?: readonly Pick<AgentView, "paneId">[] };
+    current(): { readonly agents: readonly Pick<AgentView, "paneId" | "agent" | "agentSession">[]; readonly shellPanes?: readonly Pick<AgentView, "paneId">[] };
     noteInput(): void;
     pokeNow(): void;
   };
@@ -8635,7 +8642,11 @@ export async function sendRoute(
     const { when: _steer, ...plain } = asked;
     sendRequest = { ...plain, text: source.text, mode: source.mode };
   }
-  let answer = await rt.send.handle(sendRequest, { session: rt.name, paneId, harness });
+  const pane = rt.engine.current().agents.find((candidate) => candidate.paneId === paneId) ?? null;
+  let answer = resendOf === undefined
+    ? await hermesGatewayAnswer(rt.hermesGateway, pane, sendRequest, rt.name, paneId, harness)
+    : null;
+  if (answer === null) answer = await rt.send.handle(sendRequest, { session: rt.name, paneId, harness });
   let receipt = answer.receipt;
   // The old row goes once the new request was taken; a refusal keeps it, text and all.
   if (resendOf !== undefined && receipt !== undefined && receipt.outcome !== "refused") {
