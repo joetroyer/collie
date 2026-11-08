@@ -88,6 +88,7 @@ describe("HermesTranscriptSource", () => {
     const source = new HermesTranscriptSource(root);
     const key = await source.resolve({ kind: "id", value: SID });
     expect(key).toContain("#" + SID);
+    expect(await source.profileHome(SID)).toBe(await realpath(root));
     const loaded = await source.load(key!);
     expect(parseHermesTranscript(loaded.text)[0]?.parts[0]).toEqual({ kind: "text", text: "older turn" });
 

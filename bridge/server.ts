@@ -47,6 +47,8 @@ import { browseFolders, type FolderBrowseContext } from "./folder-browse.ts";
 import { MAX_FAVOURITES, MAX_FOLDER_CHARS, type FolderSurface } from "./folders.ts";
 import { isValidWorktreeBranch } from "./worktree-branch.ts";
 import { createHarnessProbe, type HarnessProbe } from "./harness-launch.ts";
+import { createHermesGatewaySender } from "./hermes-gateway-runtime.ts";
+import { tryHermesGatewaySend, type HermesGatewayPane, type HermesGatewaySender } from "./hermes-gateway.ts";
 import { launchReplay, memoryLaunchReceipts, type LaunchReceiptSurface } from "./launch-receipts.ts";
 import type { LaunchWindow } from "./launch-window.ts";
 import { isStarterBody, launchStarter, memoryStarterReceipts, starterItems, type StarterReceiptSurface } from "./starter-launch.ts";
@@ -1668,6 +1670,9 @@ export function startServer(opts: {
   // ONE registry for the process, built by the caller so the cache tracker probes through the same
   // adapters (and therefore the same memoised path caches) the history route reads.
   const journals = cfg.transcript ? (opts.journals ?? buildJournalRegistry(cfg.journalRoots, cfg.modelCatalogs)) : null;
+  // Hermes' Ink TUI is driven through its authenticated resident gateway. The sender only attaches to
+  // an already-running owner; every pre-submit failure falls back to the classic screen protocol.
+  const hermesGateway = createHermesGatewaySender(cfg.journalRoots.hermes);
   const transcripts = cfg.transcript ? new TranscriptStore() : null;
   // The live half of the same reading, over the same store: a `?before=` page IS a History page with
   // the live window's numbering put back on it, so the two must share one cache or a "load older" tap
@@ -2432,7 +2437,7 @@ export function startServer(opts: {
       // A reply that submits text runs this session's Send Protocol (M56 spec 06), on any terminal
       // pane: an agent's (its string picks the profile) or a bare shell's (no profile, typed and Entered blind).
       if (action === "reply" && req.method === "POST")
-        return afterPaneInput(rt.engine, await replyPane(herdr, cfg, paneId, req, audit_, device, session, { ...replySendOf(rt), readHint: paneReadHint(rt.engine, paneId) }));
+        return afterPaneInput(rt.engine, await replyPane(herdr, cfg, paneId, req, audit_, device, session, { ...replySendOf(rt), hermesGateway, readHint: paneReadHint(rt.engine, paneId) }));
       if (action === "keys" && req.method === "POST")
         return afterPaneInput(rt.engine, await keysPane(herdr, cfg, paneId, req, audit_, device, session, paneReadHint(rt.engine, paneId)));
       if (action === "upload" && req.method === "POST") return uploadPane(cfg, paneId, req, audit_, device, session);
@@ -5605,6 +5610,8 @@ export async function typeIntoFreshShell(
 export interface ReplySendContext {
   readonly protocol: SendProtocol | undefined;
   readonly harnessOf: (paneId: string) => string | null;
+  readonly paneOf?: (paneId: string) => HermesGatewayPane | null;
+  readonly hermesGateway?: HermesGatewaySender;
   /** The state engine's hint for the binding read of this pane (paneReadHint). Absent: none. */
   readonly readHint?: MuxReadHint;
 }
@@ -5642,6 +5649,7 @@ export function replySendOf(rt: Pick<SendRouteRuntime, "send" | "engine">): Repl
       if (agent !== undefined) return agent.agent;
       return (shellPanes ?? []).some((pane) => pane.paneId === paneId) ? "" : null;
     },
+    paneOf: (paneId) => rt.engine.current().agents.find((pane) => pane.paneId === paneId) ?? null,
   };
 }
 
@@ -5652,7 +5660,6 @@ export async function replyThroughProtocol(
   fields: JsonObject,
   context: { readonly audit: AuditLog; readonly device: string | null; readonly redact: boolean; readonly acceptEncoding: string | null },
 ): Promise<Response> {
-  if (send.protocol === undefined) return text(REPLY_OFF_TEXT, 409);
   const harness = send.harnessOf(paneId);
   if (harness === null) return text("no such terminal pane", 404);
   const words = typeof fields.text === "string" ? fields.text : "";
@@ -5668,7 +5675,50 @@ export async function replyThroughProtocol(
   // A request id the caller minted is the phone's, on a crew member's pane (M56 spec 06): a person's
   // send, which may steer (M69). A caller that names no id is not the phone and never steers.
   const sendRequest: SendRequest = fields.id === undefined ? asked : { ...asked, fromPhone: true };
-  const answer = await send.protocol.handle(sendRequest, { session, paneId: target, harness });
+  let answer: SendAnswer | null = null;
+  const gateway = send.hermesGateway;
+  const pane = send.paneOf?.(paneId) ?? null;
+  if (gateway !== undefined && pane !== null && sendRequest.mode === "send") {
+    const result = await tryHermesGatewaySend({
+      pane,
+      requestId: sendRequest.id,
+      text: sendRequest.text,
+      mode: sendRequest.when === "steer" ? "steer" : "send",
+      send: (candidate) => gateway.send(candidate),
+    });
+    if (result !== null && result.kind !== "fallback") {
+      const outcome = result.kind === "steered" ? "steered" : result.kind === "unknown" ? "unknown" : "sent";
+      const receiptBase = {
+        requestId: sendRequest.id,
+        session,
+        paneId: target,
+        paneGeneration: `hermes:${pane.agentSession?.value ?? target}`,
+        harness,
+        version: null,
+        profileId: "hermes-gateway-v1",
+        profileStatus: null,
+        textHash: new Bun.CryptoHasher("sha256").update(words).digest("hex"),
+        textLength: words.length,
+        s0: null,
+        s1: null,
+        s2: null,
+        gapsMs: {},
+        keys: [],
+        outcome,
+        acknowledged: sendRequest.id,
+      } as const;
+      const receipt = result.kind === "sent" && result.queued
+        ? { ...receiptBase, queued: true as const }
+        : result.kind === "unknown"
+          ? { ...receiptBase, reason: "no_evidence" as const, detail: result.reason }
+          : receiptBase;
+      answer = result.kind === "unknown" ? { receipt, offers: [], detail: result.reason } : { receipt, offers: [] };
+    }
+  }
+  if (answer === null) {
+    if (send.protocol === undefined) return text(REPLY_OFF_TEXT, 409);
+    answer = await send.protocol.handle(sendRequest, { session, paneId: target, harness });
+  }
   const receipt = answer.receipt;
   const auditDetail: AuditDetail = { mode: sendRequest.mode, submit: true, textLength: words.length };
   if (receipt !== undefined) {

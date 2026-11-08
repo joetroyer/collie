@@ -11,7 +11,7 @@
 
 import { Database } from "bun:sqlite";
 import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { JsonObject, JsonValue } from "../json.ts";
 import {
@@ -410,6 +410,14 @@ export class HermesTranscriptSource implements TranscriptSource {
       }
     }
     return null;
+  }
+
+  /** Profile home that owns a stored session, for canonical gateway attachment. */
+  async profileHome(sessionId: string): Promise<string | null> {
+    const key = await this.resolve({ kind: "id", value: sessionId });
+    if (key === null) return null;
+    const parts = splitHermesKey(key);
+    return parts === null ? null : dirname(parts.dbPath);
   }
 
   async stat(key: string): Promise<{ size: number; mtimeMs: number } | null> {
