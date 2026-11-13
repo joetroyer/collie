@@ -11,7 +11,7 @@ import {
   resolveHookCommand,
   type HookTarget,
 } from "./hooks.ts";
-import { skillReport } from "./skill-install.ts";
+import { BY_HAND, skillReport } from "./skill-install.ts";
 import { HOST, type Host } from "../bridge/host.ts";
 import { beaconReader } from "../bridge/beacon-io.ts";
 import { readBeacons, type BeaconSweepDeps } from "../bridge/beacon/reader.ts";
@@ -88,7 +88,7 @@ import {
 import { packageCommand } from "./package-command.ts";
 import { linkPath, type LinkReader, realLinkFs, resolveLinkTarget } from "./link.ts";
 import { classifyExe, exePathOf, type ExeEvidence } from "../bridge/exe-replaced.ts";
-import { queryTask, taskOwner, windowsPathKey } from "./task-scheduler.ts";
+import { queryTask, TASK_QUERY_PATIENT_MS, taskOwner, windowsPathKey } from "./task-scheduler.ts";
 import { agentLabel, collieBinary, unitName } from "./unit.ts";
 import { pidFilePath } from "./lifecycle.ts";
 import { DEFAULT_COLUMNS, type Ui } from "./render.ts";
@@ -1718,9 +1718,13 @@ export function secretsPrivate(deps: Pick<DoctorDeps, "ctx" | "host" | "ownerOnl
 export function windowsTask(deps: Pick<DoctorDeps, "ctx" | "exec" | "host" | "link">): Finding {
   const check = "windows-task";
   const name = agentLabel(deps.ctx.instance);
-  const query = queryTask(deps.exec, name, deps.host);
-  if (query === undefined) return skipped(check, "no PowerShell to read Task Scheduler with", "run `collie status` from a PowerShell");
-  if (query === null) return skipped(check, `no task ${name} is registered`, "`collie start` registers it");
+  const lookup = queryTask(deps.exec, name, deps.host, TASK_QUERY_PATIENT_MS);
+  // Not "no task is registered": the query did not answer, so Collie does not know (#762).
+  if (lookup.kind === "unknown") {
+    return skipped(check, `could not read the task ${name} (${lookup.why})`, `run \`collie doctor\` again, or \`schtasks /query /tn ${name}\` from a terminal`);
+  }
+  if (lookup.kind === "absent") return skipped(check, `no task ${name} is registered`, "`collie start` registers it");
+  const query = lookup.task;
   switch (taskOwner(query, deps.ctx.root, deps.host)) {
     case "legacy":
       return warn(check, `Task ${name} still runs the old script (contrib\\windows\\collie-ctl.ps1)`, "Run: collie restart");
@@ -1903,19 +1907,28 @@ function beaconHooks(
  * Warn on stale, ok otherwise, as `hooksAreBehind` treats the hooks: a target with no skill is not
  * drift (the harness is not here, the sync is off, or the operator uninstalled it, ADR 0111). A refused
  * target is named, because install would not heal it, but it is not a warning either.
+ *
+ * An old block that an earlier build left in an instruction file (#770) is a copy behind this build:
+ * sync cuts it. One that sync may not cut (damaged or doubled markers, a symlinked file) is a warning
+ * of its own, because only the operator can take it out.
  */
 function skillWalkyTalky(deps: DoctorDeps): Finding {
   const check = "skill-walky-talky";
   const report = skillReport({ ctx: deps.ctx, files: deps.files, fs: deps.link });
-  const stale = report.filter((r) => r.state.kind === "stale");
+  const stuck = report.flatMap((r) => (r.legacy.kind === "refused" ? [r.legacy] : []));
+  const stuckLine = stuck.length === 0 ? null : `an old WalkyTalky block Collie may not cut: ${stuck.map((l) => `${l.path} (${l.reason})`).join("; ")}`;
+  const stale = report.filter((r) => r.state.kind === "stale" || r.legacy.kind === "block");
   const installed = report.filter((r) => r.state.kind === "installed");
   if (stale.length > 0) {
+    // A stuck block does not hide a stale copy elsewhere: one row names both.
+    const install = "`collie skill install all` — it replaces our own skill file and cuts an old block, and leaves every other line alone";
     return warn(
       check,
-      `${String(stale.length)} installed copy behind this build (${stale.map((r) => r.file.target.harness).join(", ")}) — the agent reads old advice`,
-      "`collie skill install all` — it replaces our own file or block in place and leaves every other line alone",
+      `${String(stale.length)} installed copy behind this build (${stale.map((r) => r.file.target.harness).join(", ")}) — the agent reads old advice${stuckLine === null ? "" : `; ${stuckLine}`}`,
+      stuckLine === null ? install : `${install}. ${BY_HAND}`,
     );
   }
+  if (stuckLine !== null) return warn(check, stuckLine, BY_HAND);
   if (installed.length === 0) return ok(check, "not installed — `collie skill install all` teaches agents to message each other");
   const refused = report.filter((r) => r.state.kind === "refused").length;
   const left = refused > 0 ? `; ${String(refused)} target${refused === 1 ? "" : "s"} refused, see \`collie skill status\`` : "";

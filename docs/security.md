@@ -77,6 +77,30 @@ that, the bridge refuses more than ten pairing attempts per source address per m
 `X-Forwarded-For` entry, the one the front door adds. From any other peer, that header is ignored. The
 counters live in memory and reset when the bridge restarts.
 
+### An agent does not pair a device
+
+`collie pair` refuses in a pane where an agent works. A paired device can read and drive every
+session. An agent that pairs one for itself skips every tap Collie asks of you. So the command asks
+the running bridge whether its pane runs an agent, and refuses there. `collie pair --json` refuses
+too. Run it in a shell pane or a terminal of your own. With no bridge running, or a bridge that does
+not know the pane, it does not refuse. The check is a speed bump, not a wall
+([What a program running as you can still do](#what-a-program-running-as-you-can-still-do)).
+
+Each pairing writes one `pair` line to the audit log. The line names the device's label, the route
+the claim came by, and the pane that made the code. The route is an address class: `loopback`,
+`tailnet`, `lan` or `internet`, never the address. Behind a front door on the same machine, such as
+`tailscale serve`, `forwardedFrom` gives the class of the address that door passed on. A local
+program can write that header itself, so `route` is the fact and `forwardedFrom` is a claim. The
+pane is `mintSession` and `mintPane`, or `not placed` when `collie pair` ran outside a pane or no
+bridge placed it. `collie pair` writes that pane into the pending code's file, and any program
+that runs as you can write that file too, so the pane is a hint, not proof. The label is the
+device's only id: `collie devices revoke` takes it. A refused `collie pair` writes a `pair-refused`
+line with the reason `agent-pane`. The log never holds the code or the token.
+
+```json
+{"ts":"2026-11-11T09:30:00.000Z","action":"pair","device":"pixel","detail":{"label":"pixel","route":"loopback","forwardedFrom":"tailnet","mintSession":"main","mintPane":"w1:p3"}}
+```
+
 ### The CLI's own reads
 
 At each start the bridge writes a new random secret to `local-secret` in its state folder.
@@ -141,6 +165,7 @@ bridge is out of reach. Every item below has a size bound and a lifetime.
 | Pairing token | localStorage | until unpair, revoke or expiry | deleted |
 | Settings: theme, language, pins | localStorage | until you change them | kept |
 | Unsent drafts | localStorage | 48 hours | deleted |
+| A theme you are trying | sessionStorage | until Keep, Back or the tab closes | kept |
 | Push endpoint | localStorage | until it changes | deleted |
 | App shell | Cache Storage | until the next build | kept |
 | Fonts and push titles | Cache Storage | until replaced | deleted |
@@ -278,6 +303,31 @@ Key security boundaries and risks:
 Restrict access further with Tailscale ACLs and `COLLIE_TRUSTED_USER`. Provided as-is, without
 warranty.
 
+## What a program running as you can still do
+
+A person's tap guards pairing. A program that runs under your own user account can still get a
+write credential, or skip the tap. The list below states facts. It is not a list of fixes. The
+state folder is `~/.local/state/collie` unless `COLLIE_STATE_DIR` moves it, and the config folder
+holds the instance's `.env`.
+
+| File or door | What it gives a program that runs as you |
+| --- | --- |
+| `paired-devices.json` in the state folder | It holds hashes, not tokens, so a read gives nothing to spend. A program that adds its own entry, with the hash of a token it made up, has a paired device. The bridge reads the file on each request, so no restart is needed. |
+| `pairing-pending.json` in the state folder | A program that writes the hash of a code it chose can claim that code at `POST /api/pair`. It never runs `collie pair`, so the agent check never runs, and the audit line names whatever pane the file names, or `not placed`. |
+| A pairing code on screen | `collie pair` prints its code in a pane. A program that reads that pane through the multiplexer can claim the code before your phone does. The phone then hears that no code waits, and the audit log shows a pairing you did not make. |
+| `POST /api/pair` on loopback | It needs a live code. Its `Origin` rule stops a web page, not a local program: a local program writes its own `Origin` and `Host` headers, and a request with no `Origin` is taken from a loopback host name. |
+| `local-secret` in the state folder | The CLI's read credential. It reads every session through the bridge on the same machine. It never writes, and never opens the Files view. |
+| The profile of a paired browser | The browser keeps its token in local storage. A program that reads the profile files gets a full device token. A program that drives the browser, for example through a debugging port, taps as you. |
+| `.env` and `config.toml` in the config folder | A program can loosen a setting, such as `COLLIE_ALLOW_ANY_HOST=1` or `free_text = true` for the launchers a phone adds, then restart the user service. |
+| `standby-devices.json` on a crew deputy | A program on the deputy can add the hash of its own token. While the standby door is armed, that token can confirm a takeover, and the takeover adds it to the deputy's own paired devices. |
+| `crew-trust.json` in the state folder | It holds this machine's crew key and the crew secret. A program that reads it can speak to the crew as this machine. |
+| The multiplexer's socket | A program can type into any pane without Collie at all, a yes on an agent's permission prompt included. |
+| `audit.log` in the state folder | A program can change or delete lines. The log tells the truth only while nobody has changed it. |
+| Collie's own files: the binary, the checkout and the user service unit | A program that changes them changes what runs as Collie. |
+
+Collie's taps protect against a remote party and against an agent that follows the rules. They do
+not sandbox a program that runs as you.
+
 ## Durable agents
 
 A durable agent you attach is code you run or deploy, and Collie treats its text as untrusted. A private socket
@@ -386,6 +436,23 @@ That line makes this machine refuse every message for its panes. The CLI on the 
 > could sign a message or claim a pane that is not its own. The signature protects a message on its
 > way between machines and tells the receiver which machine sent it. It does not protect you from a
 > program on the same machine that lies about itself.
+
+The community theme list is another outbound call, and it also happens only on a tap: **Refresh** in
+the **Browse community themes** sheet of the **Theme** card. The bridge makes one anonymous HTTPS
+`GET`, with the user-agent `Collie/<version>` and nothing about you:
+
+```text
+https://colliepwa.dev/themes/registry.json
+```
+
+The address is fixed in the bridge. The one exception is `COLLIE_THEME_REGISTRY_URL`, for a test
+against a staged copy of the site ([Configure](configure.md#the-community-theme-list)). The bridge
+follows a redirect only on the address's own site, refuses a file that is not typed as JSON, over 1 MB or with more than 500 themes,
+and keeps a theme only when Collie's own theme parser accepts it. It keeps the list in the `themes` folder of its state folder.
+The phone checks every theme again before it draws one, and the page itself never calls colliepwa.dev.
+The refresh needs a write device, runs on the lead only, allows one fetch at a time and is audited.
+A refresh within a minute of a good fetch answers that copy and fetches nothing. A copy older than a
+week is not listed, so the next tap fetches again.
 
 WalkyTalky adds no outbound call. A message to another machine rides the crew link that already
 exists, and no model, cloud service or third party sees it.
@@ -532,11 +599,15 @@ error, with the fix. A folder that Collie cannot check is a warning: `cannot con
 From 1.27.0 each Collie bridge sends one small anonymous ping a day to our own analytics. It carries
 the Collie version, the operating system, how Collie was installed, and whether the bridge runs
 alone or in a crew, under a random ID made on your machine. No IP address is stored with the ping.
-When Collie shows one of its two trouble cards, the next ping also carries how often, with the name
-and version of the agent program and the multiplexer it ran on, never what was said or shown.
 Nothing else is sent: no host name, no folder, nothing you type or read. We need these numbers to
 spot regressions and slow degradations after a release, and to steer what gets built next. Up to
 1.26.x Collie sent nothing ([ADR 0129](../.adr/0129-an-anonymous-install-count-on-by-default.md)).
+
+When Collie shows one of its two trouble cards, the next ping also carries how often, in six fields:
+which card, the name and version of the agent program, the multiplexer it ran on, a count and, from
+1.27.4, a screen field on a dialog card. The screen field is a short hash of the dialog's key-hint
+row only, never a row with your text, never the screen or what you typed. It is absent unless that
+row is a short list of key hints, such as `enter select · esc back`.
 
 Turning it off is one switch: Settings, System, **Telemetry**. `COLLIE_TELEMETRY=0`,
 `telemetry = false` in `config.toml` or `DO_NOT_TRACK=1` do the same, and so does blocking the one

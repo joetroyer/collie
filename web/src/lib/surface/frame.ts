@@ -14,7 +14,7 @@
 // from nothing but the rows.
 
 import { displayWidth, widePieces } from "../text-width";
-import { anyListRow, insideList, listedBottom, openListUnder } from "./command-list";
+import { anyListRow, edgeRunListRow, insideList, listedBottom, openListUnder } from "./command-list";
 import { popupUnder } from "./popup";
 import { readAboveNotice } from "./notice";
 import type { FrameAnchor, Profile } from "./profile";
@@ -27,6 +27,8 @@ export interface FrameRun {
   readonly text: string;
   /** The run's foreground colour; absent for the terminal's default ink (`idle.frame.underPainted`). */
   readonly fg?: string | undefined;
+  /** The run's background colour; absent for the terminal's default (`commandList.pointerFill`). */
+  readonly bg?: string | undefined;
   readonly bold?: boolean;
   readonly dim?: boolean;
   readonly italic?: boolean;
@@ -154,7 +156,7 @@ interface Compiled {
   readonly hint: ReadonlySet<string> | null;
   /** The placeholder's colours (`idle.placeholders.fg`); null for a profile that names none. */
   readonly placeholderFg: ReadonlySet<string> | null;
-  /** The placeholder's shapes (`idle.placeholders.patterns`); empty for a profile that names none. */
+  /** The placeholder's shapes (`idle.placeholders.patterns` and the layout's own); empty when neither names one. */
   readonly placeholderPatterns: readonly RegExp[];
 }
 
@@ -193,7 +195,8 @@ function compile(idle: IdleProfile): Compiled {
     },
     hint: idle.inlineHint === undefined ? null : new Set(idle.inlineHint.fg),
     placeholderFg: idle.placeholders.fg === undefined ? null : new Set(idle.placeholders.fg),
-    placeholderPatterns: (idle.placeholders.patterns ?? []).map((source) => new RegExp(source, "u")),
+    // The profile's shapes hold for every layout; a layout's own (`idle.frame.placeholderPatterns`) for it alone.
+    placeholderPatterns: [...(idle.placeholders.patterns ?? []), ...(idle.frame.placeholderPatterns ?? [])].map((source) => new RegExp(source, "u")),
   };
   compiledByIdle.set(idle, compiled);
   return compiled;
@@ -860,7 +863,14 @@ function interiorFrameAt(rows: readonly FrameRow[], bottom: number, idle: IdlePr
   let top = last;
   if (c.interior.rows !== null) {
     let stop = -1;
+    const list = idle.volatile.below.commandList;
     while (top >= 0 && bottom - top <= budget && c.interior.rows.test(texts[top]!.trimEnd())) {
+      // A command list drawn in the box's own edge run (`commandList.inEdgeRun`) stands over the top
+      // edge: its lowest entry ends the box, and the row under it must be the top edge.
+      if (top < last && edgeRunListRow(texts[top]!, list)) {
+        stop = top + 1;
+        break;
+      }
       // A row that is the top edge and cannot be a prompt row ends the box: a draft's indented rows
       // above it are the transcript's.
       if (anchored(texts[top]!, c.top) !== null && (isBlank(texts[top]!) ? !c.prompt.pattern.test("") : anchored(texts[top]!, c.prompt) === null)) {

@@ -12,7 +12,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router";
-import { Settings } from "lucide-react";
 
 import { isConnecting } from "@/lib/connection";
 import { useNav } from "@/hooks/use-nav";
@@ -29,12 +28,13 @@ import { useReconnected } from "@/lib/reconnected";
 import { useScope } from "@/lib/session";
 import { useOptionalRootData } from "@/lib/route-data";
 import { releaseOffered } from "@/lib/update-ribbon";
-import { CollieHome } from "@/components/collie-home";
+import { CollieHome, type MarkTarget } from "@/components/collie-home";
 import { AlphaBar } from "@/components/alpha-bar";
 import { Collapse } from "@/components/ui/collapse";
 import { SectionLabel } from "@/components/ui/section-label";
 import type { BridgeStatus } from "@/lib/types";
 import type { Scope } from "@/lib/scope";
+import { Icon } from "@/components/icons/icon";
 
 /** What a route claims about the SHAPE of the shared row, as opposed to the content it portals into
  *  it. These are the three things the shell itself has to draw differently, and every one of them is
@@ -292,8 +292,10 @@ export function AppHeaderHost({ bridge, error, lastSeenAt, children }: AppHeader
   // in place. Up, not down: the dashboard is every route's ancestor (ADR 0067). `upTo`, the move to
   // one NAMED parent, and not `up`: from a pane opened out of a space, `up` steps back to the space.
   // Not while `lost`, when the mark does not show the update and the tap keeps its ordinary meaning.
-  const onHome = () => {
-    if (applying && !lost) {
+  // WHICH of the two is the mark's own reading (`markReading` in collie-home.tsx), the same one that
+  // picks its state, so the tap goes where the mark points and nowhere else.
+  const onHome = (target: MarkTarget) => {
+    if (target === "update-line") {
       requestBundleFocus();
       if (pathname !== "/") nav.upTo(homePath(scope));
       return;
@@ -702,7 +704,7 @@ export function SettingsGear({ scope }: { scope?: Scope }) {
       // breadcrumb absorbs — it already truncates by design.
       className="relative grid size-11 shrink-0 place-items-center text-muted-foreground transition-colors hover:text-foreground"
     >
-      <Settings className="size-5" />
+      <Icon name="settings" className="size-5" />
       {offered && (
         // 6px, in the corner of the icon and inside the 44px box: a fact about the app, not a control.
         <span

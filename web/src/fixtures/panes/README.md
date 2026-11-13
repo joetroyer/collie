@@ -250,6 +250,12 @@ user, host or path is in either file.
 | `pi--v130-gentle-choice-moved.txt` | The same dialog after `herdr pane send-keys <pane> Down`, ` → Green` | walk (the pair in `walk-pairs.ts`) |
 | `pi--v130-gentle-review-consent.txt` | gentle-pi 4.2.0 on pi 1.3.0, the review-consent screen: NO rule frame and no editor or status row, a bold title, two prose rows, three numbered options with `→` at column 0 on option 1, an `Effect:` paragraph, and `↑↓ choose · Enter confirm · Esc cancel · D details` as the screen's last row | walk |
 | `pi--v130-gentle-review-consent-moved.txt` | The same screen after `herdr pane send-keys <pane> Down`: `→` on option 2, and the `Effect:` paragraph describes option 2 | walk (the pair in `walk-pairs.ts`) |
+| `pi--v150-gentle-review-consent--w119.txt` | gentle-pi 4.6.0 on pi 1.5.0 (issue 712, reporter's capture): the same screen, the `Effect:` paragraph wrapped with an 8-space hanging indent, and the git and context status row straight under the footer | walk |
+| `pi--v150-gentle-review-consent-moved--w119.txt` | **Derived**: the capture above with `→` on option 2 (the `Effect:` text is not re-captured; the note rows are blanked in the core signature) | walk (the pair in `walk-pairs.ts`) |
+| `pi--v150-gentle-review-consent-fullscreen--w129.txt`, `-fullscreen--w198.txt` | Gentle Shell fullscreen: one blank row under the footer, then a right-aligned `branch │ mode … ctx … $` row | walk |
+| `pi--v150-gentle-review-consent-regular--w69.txt` | Gentle Shell regular mode: a `✿ gentle shell ⟡ …` row under the footer, and an indented widget row straight over the title. The reporter's user name is cut to `someuse` | walk |
+| `pi--v150-gentle-review-consent-rail-tall--w198.txt` | Gentle Shell's side rail over the top rows, the dialog under it, no status row | walk |
+| `pi--v150-gentle-review-consent-rail-beside--w198.txt` | The dialog's rows beside the rail's boxes (issue 710, open) | raw, Escape card |
 
 ## gentle-pi soft-wrapped draft on pi 1.3.0 (issue 553, captured 2026-10-21, Herdr 0.9.5)
 
@@ -345,6 +351,36 @@ clears it.
 | `pi--v130-powerline-goal-widget-running--w254.txt` | A running turn (`⠹ Working` in the top rule), the goal widget, five rows under the box (the prompt widget row and the context chart's four) | running, modal none, composer empty |
 | `pi--v130-powerline-welcome-idle--w254.txt` | Another fresh session before its first key, the splash at the top | free |
 | `pi--v130-powerline-welcome-gone--w254.txt` | The same pane after the probe character and its Backspace: the splash rows are blank | free; against the one before it the rows above only lost text (`idle.volatile.above.losesText`) |
+
+## pi 1.5.0 under pi-zentui's rail editor (issue 747, captured 2026-11-09, tmux)
+
+**Live**, from a lab run: pi 1.5.0 (`@earendil-works/pi-coding-agent`) with pi-zentui 0.34.0 alone and
+its defaults (Opencode Editor, Starship Footer), installed in a throwaway npm prefix under
+`~/.cache/collie-lab/` and started as the reporter did, `pi -ne -e <prefix>/node_modules/pi-zentui/extensions/zentui/index.ts
+--no-session`, with a scratch `PI_CODING_AGENT_DIR`, a scratch git folder `proj` and a placeholder
+OpenRouter key, so pi picks a model and draws the model row. pi ran in a private tmux server
+(`tmux -L`), read with `capture-pane -e -p`: LF line ends, tmux cuts trailing spaces, cut here to the rows
+over the box, no trailing newline. tmux sets no `TERM_PROGRAM`, so zentui's icon mode is ASCII and its
+rail is `|`, as in the issue; the `nerd` files ran with `ZENTUI_NERD_FONTS=1`, rail `│`. The
+`native-footer` files ran with `{"components":{"footer":{"style":"native"}}}` in zentui's
+`zentui.json`, so pi's own cwd and stats rows stand under the box. The Opencode Editor draws pi's two
+rules and between them a rail on every row: a pad row, the editor rows (the cursor cell on the last), a
+pad row, and the model row `| <model>  <provider>  <thinking>`. The Starship footer opens with a space
+and the folder name. The echo file followed one send with the placeholder key: OpenRouter answered 401,
+no model turn ran and nothing was spent; zentui frames the sent prompt in the transcript with the same
+rails, and pi's error rows stand between it and the live box. Nothing personal was on screen.
+
+| Fixture | State | Reads as |
+| --- | --- | --- |
+| `pi--v150-zentui-idle--w120.txt`, `-idle--w80.txt` | Empty rail box over the Starship footer | free (the profile's rail layout, the last `frameAlternates` entry); plain read: no frame, never free (`fold.plain.allow.json`) |
+| `pi--v150-zentui-nerd-idle--w120.txt` | The same with the `│` rail | free |
+| `pi--v150-zentui-echo-idle--w120.txt` | Empty rail box under the framed echo of `say hi` and the 401 rows | free; the screen cut over the live box finds no box |
+| `pi--v150-zentui-draft--w120.txt`, `-draft--w80.txt`, `-nerd-draft--w120.txt` | `hello from the probe` typed, not sent | draft `hello from the probe` |
+| `pi--v150-zentui-multiline-draft--w120.txt`, `-multiline-draft--w80.txt` | A second line typed after Ctrl+J | draft, the two lines joined by one space |
+| `pi--v150-zentui-wrapped-draft--w120.txt` | One long line that wraps inside the rail | draft, the two rows joined |
+| `pi--v150-zentui-pipe-draft--w80.txt` | `|` typed: the row reads `| |` | draft `|` |
+| `pi--v150-zentui-model-selector--w120.txt`, `-model-selector--w80.txt` | pi's `/model` selector, drawn in the editor's place with no rail | modal unreadable, never free |
+| `pi--v150-zentui-native-footer-idle--w120.txt`, `-native-footer-draft--w120.txt` | The rail box over pi's native footer | free, and draft `hello from the probe`; a plain read gives the same |
 
 ## pi's permission gate on pi 0.87.1 (captured 2026-10-17, Herdr 0.9.4)
 
@@ -2482,6 +2518,47 @@ chip, a review body with no `Review` heading, and a checkbox on the free-text ro
 | `oc--v211-question--two--review.txt` | The `Submit` tab with both answered: `Colour: Red` and `Size: Small` on consecutive rows, no `Review` heading | not read |
 | `oc--v211-question--multi--free-text.txt` | The free-text input OPEN: the row reads `5. [✓] <typed>`, the list's footer gives way to `⇆ tab  enter done  esc close`. Stays raw; the card with Escape covers it | not read |
 
+## opencode 2.2.6 box corpus (captured 2026-11-09, opencode 2.2.6 and 1.19.5, private tmux server, #749)
+
+Captures of the input box on **opencode 2.2.6** (the release tarball, checked against its
+`SHA256SUMS`) and, for comparison, **1.19.5** (npm), both in a lab prefix under `~/.cache/collie-lab/`
+with their own `HOME`, `OPENCODE_DISABLE_AUTOUPDATE=1`, an `OPENCODE_CONFIG` that asks for `bash` and
+`edit`, and a fresh `git init` in `/tmp/collie-oc-749`. Run in a private tmux server
+(`tmux -L <name>`, 120 by 40 and 50 by 40, `COLORTERM=truecolor`) and read with
+`tmux capture-pane -p -e`, CRLF added, as the 2.1 corpus above. `oc--v226-herdr--slash-models.txt` is
+a `herdr pane read --source recent --lines 40 --format ansi` of a pane in a private Herdr session
+(`herdr --session <name> server`, its own config), the read the bridge makes: its rows run past the box
+in the app's own fill. Pastes were bracketed (`tmux paste-buffer -p`); no text was submitted. The one
+model turn (`Reply with only ok`, on the free model the fresh install picks, no cost) made the session
+the `session-idle` and `slash-compact` captures show: `/compact` is listed only once a session exists.
+Every file was checked for user and host names, home paths and keys.
+
+The command list stands in the box's own edge run, right over the bare top edge row, each entry closed
+by a `┃` of its own, in the same shape on 1.18.32 (`oc--slash-palette.txt`), 1.19.5 and 2.2.6. The
+highlighted entry has no glyph: it stands on the accent fill, every other entry on the box's fill. A
+whole paste folds to `[Pasted ~N lines]`, N the lines, on both versions.
+
+| Fixture | State / what's in it | Herdr status |
+| --- | --- | --- |
+| `oc--v226-fresh-idle.txt` | Home screen: the recent-session row, the logo, the empty box with its `Ask anything… "…"` placeholder, the model row, the rule, then the cwd row with `shift+tab agents  ctrl+p commands`, and `2.2.6` alone at the foot | not read |
+| `oc--v226-narrow--fresh-idle.txt` | The same at 50 columns: the placeholder is cut at the box's edge, the cwd row shortens to `/…/collie-…` | not read |
+| `oc--v226-session-idle.txt` | After one turn: the transcript, then an empty box whose prompt row is bare (no placeholder in a session), the model row, the rule, the cwd and token row | not read |
+| `oc--v226-slash-palette.txt` | `/` typed: ten list rows over the top edge, the fill on `/agents` | not read |
+| `oc--v226-narrow--slash-palette.txt` | The same at 50 columns, descriptions cut before the closing `┃` | not read |
+| `oc--v226-slash-comp.txt` | `/comp` typed on the home screen: one row, `/review`, with the fill. No session, so no `/compact`; Enter would run `/review` | not read |
+| `oc--v226-narrow--slash-comp.txt` | The same at 50 columns | not read |
+| `oc--v226-slash-compact.txt` | `/compact` typed in the session: `/compact` with the fill, `/review` under it | not read |
+| `oc--v226-narrow--slash-compact.txt` | The same at 50 columns | not read |
+| `oc--v226-herdr--slash-models.txt` | Herdr read, home screen, `/models` typed: one row, `/models`, with the fill | not read |
+| `oc--v226-paste-200.txt` | A 200-character line pasted: `[Pasted ~1 lines]` | not read |
+| `oc--v226-narrow--paste-200.txt` | The same at 50 columns | not read |
+| `oc--v226-paste-600.txt` | 600 characters over four lines pasted: `[Pasted ~4 lines]` | not read |
+| `oc--v226-narrow--paste-600.txt` | The same at 50 columns | not read |
+| `oc--v226-command-palette.txt` | The ctrl+p palette: `Commands … esc` over `Search`, a `Suggested` group, cutting through the box | not read |
+| `oc--v226-models-picker.txt` | The `/models` picker (Enter on its own list row opened it): `Select model … esc` over `Search`, the free models | not read |
+| `oc--v1195-slash-comp.txt` | 1.19.5, `/comp` typed: the same one-row list on `/review`, the description column two cells narrower | not read |
+| `oc--v1195-paste-600.txt` | 1.19.5, the same four-line paste: `[Pasted ~4 lines]` | not read |
+
 
 ## Claude Code box table with a VS16 emoji (captured 2026-10-13, Claude Code 2.1.296, herdr 0.9.0, sandbox pane)
 
@@ -3116,6 +3193,15 @@ this corpus. Recipes: [`hermes/CLARIFY_NOTES.md`](../../lib/harness/hermes/CLARI
 | `hermes--slash-popup` | `/mo` typed, grey auto-suggestion `a`, completion menu under the input | composer, draft `/mo` |
 | `hermes--model-picker` | `/model`, the model list; status slot blank, input still idle | picker, Ctrl+C card |
 | `hermes--palette` | Ctrl+P palette; status slot blank, input still idle | picker, Ctrl+C card |
+| `hermes--tui-idle-hint` | Ink TUI (`hermes --tui`), issue 549, a fresh session: status row ` ─ 就緒 │ … ─ ~/workspace` one column in, ` ❯ 有什麼想問的？…` under it, no rule rows. From NCheuk's plain-text capture of 2026-11-04 (no SGR); the two transcript rows above are invented and the rows are padded to one width | composer, hint read as an empty box, free |
+| `hermes--tui-idle-title` | The same once the session has a title: the status row ends in the title and ` ❯` is bare (Ink shows no hint after the first turn) | composer, empty, free |
+| `hermes--tui-idle-en` | The English idle screen of the issue body (MigueMercedes, Hermes 0.22.2): ` ─ ready │ …` over ` ❯ Try "explain this codebase"`; the shell row above is the capture's | composer, hint read as an empty box, free |
+| `hermes--tui-draft` | A one-line draft ` ❯ testing idle with draft` under the status row, no title (NCheuk, 2026-11-04) | composer, draft read back |
+| `hermes--tui-draft-title` | The same with a titled status row | composer, draft read back |
+| `hermes--tui-busy` | A turn running: ` ─ (⊙_⊙) formulating…   · 13m 32s │ …` over ` ❯ Ctrl+C 中斷…`. NCheuk's capture of 2026-11-03 (issue 549 and PR 661): plain text, 215 columns, transcript rows invented | composer, turn running, the busy hint no draft (a send is held) |
+| `hermes--tui-busy-echo` | The same with an echoed ` ❯ some earlier echoed command` row in the transcript above | same read: the lowest box wins |
+| `hermes--tui-busy-fresh` | A turn running in a fresh session, ` ─ ヽ(>∀<☆)☆ deliberating…  · 0s │ …` (NCheuk, 2026-11-04) | composer, turn running |
+| `hermes--tui-busy-title` | The same with a titled status row | composer, turn running |
 | `hermes--exited` | The shell after `/exit` | no input, no card |
 | `hermes--v0225-title-idle` | Hermes 0.22.5, issue 657: the session title sits in the top rule, `── Session Title ─`, over the `❯` row and a 120-cell bottom rule. Three rows only, from the reporter's report; the styling, the placeholder row and the bottom rule's width (Hermes draws it across the pane) come from `hermes--idle`, and the rows start in column 0 (the report's one-space indent is Markdown, and a leading space fails the column-0 anchors). Not a `herdr pane read` of ours | composer, no draft, free |
 | `hermes--clarify-choices` | One question, three choices and Other, `❯` on 1, countdown `(3547s)` | digits 1 to 4 |
@@ -3244,6 +3330,67 @@ Claude dialog captures do, so the echo rule never reads them. Pinned by `cues.te
 | `claude--v2-1-310-queued-numbered-first--w119.txt` | The known limit: the last block `❯ 1. reply H first` over `  2. reply I second` and the hint, the shape of a dialog's pointer on its first option. Reads `running`, `unreadable`, `empty` |
 | `claude--v2-1-310-resume-two-sessions--w119.txt` | `/resume` with two past sessions: `  ❯ Fruit taste descriptions list` over `    1 minute ago · master · 196KB`, the second session, the two-row key footer. No box. Lifts an ask; the cues alone read strong |
 | `claude--v2-1-310-rewind--w119.txt` | Escape Escape on an empty box: `Rewind`, one earlier prompt, `  ❯ (current)`, `Enter to continue · Esc to cancel`. No box. Lifts an ask; the cues alone read strong |
+
+## The Remote Control row under the box (built 2026-11-11, Claude Code 2.1.319, 100 columns)
+
+**Built, not captured.** A phone screenshot of a pane on Claude Code 2.1.319 with Remote Control on
+showed four rows under an empty box: a custom statusline, the mode row, `✔ Update installed · Restart
+to update`, and a lone `/rc`. A send to that pane was held "Something is open at the box" while Claude
+sat idle. The file rebuilds that footer in the corpus's colours over a neutral transcript; no row of
+the screenshot's transcript or titles is in it. The statusline is a stand-in of the same shape.
+
+`/rc` is Claude Code's Remote Control status row. The 2.1.319 bundle labels it `/rc connecting…`,
+`/rc active`, `/rc reconnecting` and `/rc failed`, and shortens `/rc active` to `/rc` once the badge
+has been seen five times. It is drawn only at 60 columns or more. Focused from the keyboard it reads
+`/rc · enter to view`, and Enter then opens the Remote Control view. The screen reads free with the
+row there; the bridge's own count of rows under the box (`idle.volatile.below.hints`) leaves the
+unfocused labels out, so the row coming or going while Collie types fails no probe. Pinned by
+`bridge/surface/protocol.claude-rc-footer.test.ts` and `fold.corpus.test.ts`.
+
+| Fixture | State / what's in it |
+|---|---|
+| `claude--v2319-rc-footer-idle--w100.txt` | An empty box under a finished turn; under it the statusline, `⏵⏵ bypass permissions on (shift+tab to cycle)`, the update notice and `/rc`. Reads `idle`, `none`, `empty`. Labelled `idle` |
+
+## Claude Code 2.1.323 with Remote Control on and off (captured 2026-11-13, 100 columns)
+
+**Captured**, in a private tmux server (`tmux -L`, `capture-pane -p -e`, 100 x 40, LF line ends, 256-colour SGR), with an
+isolated `CLAUDE_CONFIG_DIR` holding only an access token, no hooks and no plugins, in a scratch git folder,
+`--permission-mode default`. Remote Control came from `claude --remote-control <name>` or `/remote-control`, and every
+session was ended with its Disconnect row afterwards. One sanitization pass, length-preserving: the scratch path
+under the home directory became `/home/dev/rc-lab/sample-project` padded with `-` (it wraps the option row of the
+Bash dialog, so its length is kept), the Remote Control session code in the link text and in the OSC 8 hyperlink
+(`https://claude.ai/code/session_…`) became zeros, and the weekly-limit row's time zone became `Europe/Lisbon`.
+No account name, e-mail address or host name was on any screen.
+
+What Remote Control draws, which the 2.1.319 field report only guessed at: the pill `/rc active` (it shortens to
+`/rc` after five sightings, and the banner's header carries the same pill) in the **footer under the box**, right-aligned
+to the last column, as an OSC 8 hyperlink (`ESC ] 8 ; id=… ; <url> ESC \ /rc active ESC [ 39 m ESC ] 8 ; ; ESC \`) in
+colour 114. It sits on the **mode row** when that row leaves room (`⏸ manual mode on · ? for shortcuts` plus the
+pill), and takes **a row of its own** when a full-width row is above it: the tmux focus-events notice, the usage row, a
+running turn's mode row with `Ctrl+Y to paste deleted text`. So the count of rows under the box moves between one
+and three as a notice comes or goes, which is what the profile's `idle.volatile.below.hints` pattern
+`^\s*/rc(?: …)?$` (issue 767) answers: it matches the row of its own, leading spaces and all. The pill drops out of
+dialogs: a dialog (AskUserQuestion, a Bash permission, `/rewind`, the slash list) replaces the footer, so no `/rc`
+row stands under one, and the readers need nothing for it.
+
+| Fixture | State / what's in it |
+|---|---|
+| `claude--v2323-rc-on-idle-notice--w100.txt` | Empty box, mode row, the focus-events notice (cut by `…`), the pill on a row of its own. Reads `idle`, `none`, `empty`. Labelled `idle` |
+| `claude--v2323-rc-on-idle-usage--w100.txt` | The same with the weekly-limit row where the notice was (`Europe/Lisbon`). Labelled `idle` |
+| `claude--v2323-rc-on-idle-joined--w100.txt` | Empty box after a turn, no notice: the pill shares the mode row, one footer row. Labelled `idle` |
+| `claude--v2323-rc-on-draft--w100.txt` | `hello there` in the box, mode row, notice, pill on its own row. Labelled `draft` |
+| `claude--v2323-rc-on-running--w100.txt` | A turn running (`✶ Ruminating…`), the mode row `esc to interrupt`, the pill on its own row. **One edit:** the mode row also carried `Ctrl+Y to paste deleted text` (a hint Claude draws after Ctrl+U), which the unread-dialog card read as a modal key; it was blanked, same width, because it is no part of the Remote Control case. Labelled `running` |
+| `claude--v2323-rc-on-ask-single--w100.txt` | An AskUserQuestion select (`Drink`, Tea or Coffee, two described options, `Type something.`, `Chat about this`) with Remote Control on. No footer, no pill. Labelled `dialog` |
+| `claude--v2323-rc-on-permission-bash--w100.txt` | A Bash permission (`touch demo2.txt`, four options) with Remote Control on. Labelled `dialog` |
+| `claude--v2323-rc-on-slash-list--w100.txt` | `/` in the box, the command list filling the screen (ten rows plus wrapped descriptions). Reads as an autocomplete block; the surface read is `unreadable` as on `claude--v21314-core-slash-list--w120.txt`, with Remote Control off too. Labelled `popup` |
+| `claude--v2323-rc-on-rewind--w100.txt` | `/rewind` with three turns listed (`↑ 11 more` is left out by the capture: this build shows a few at a time). Lifts a menu with Continue and Cancel. Labelled `dialog` |
+| `claude--v2323-rc-off-idle--w100.txt`, `-ask-single--`, `-permission-bash--` | The same idle box, ask and permission dialog with Remote Control off. The dialogs read as the on-captures do (`remote-control.test.ts`). Labelled `idle`, `dialog`, `dialog` |
+
+The Send Protocol is pinned over these footers in `bridge/surface/protocol.claude-rc-footer.test.ts` (the footer
+changing from the joined shape to the own-row shape, and back, while Collie types fails without the hint). The
+tall `/rewind` list in `region-top.test.ts` is **constructed** from `claude--v2323-rc-on-rewind--w100.txt` (the
+extra turns are copies of its own entries): a rewind taller than 30 rows under its plain `─` border is the case the
+border window of 60 rows (`BORDER_SCAN_WINDOW`) reads.
 
 ## omp fuzzy command list under the box (captured 2026-10-25, omp 18.6.1 and 18.12.6, omp-gang testers 01 and 02)
 
@@ -3437,6 +3584,39 @@ the status row above it named the operator's accounts and was dropped.
 | `omp--v18-16-0-ask-single-glyph-hide--w200.txt` | `dialog` | `과일을 고르세요` with 사과, 배, 포도 and `Other`, pointer on the first row, the footer ending `⌥H hide` instead of `Alt+H hide`. Lifts (ask.ts) |
 | `omp--v18-16-0-ask-single-glyph-hide-moved--w200.txt` | `dialog` | The same dialog after one `Down` (`hc keys … down`), pointer on 배. Its walk pair |
 | `omp--v18-16-0-answer-editor-empty--w200.txt` | `idle` | `Enter` on `Other` opened `Custom answer: 과일을 고르세요`, hint `⏎ or ⌃Q submit  ⎋ cancel  ⌃G external editor`: the same prompt-style box as the `custom-answer-*` rows above, in the glyph keycap dialect, with no Ask box above it. Reads as a free box since #704 |
+
+## omp 18.18.2 Ask batch with a background-only current tab (captured 2026-11-09, tmux 3.8 `capture-pane -e`, 120 columns)
+
+A real three-question `ask` call (Claude Haiku 4.5 in omp 18.18.2, the `unicode` symbol preset), trimmed to
+the dialog; the status row above it named the operator's accounts and was dropped. omp 18.18 paints the
+current tab with a background only, where 18.10 painted it bold on a background. A plain read (herdr-core
+0.1.19 `hc read`) carries no style, so none of these lifts there (`fold.plain.allow.json`).
+
+| Fixture | State | What it shows |
+| --- | --- | --- |
+| `omp--v18-18-2-ask-batch--w120.txt` | `dialog` | Fruit/Color/Size/Submit tabs, Fruit current, `Which fruit?` with Apple pointed. Lifts |
+| `omp--v18-18-2-ask-batch-moved--w120.txt` | `dialog` | The same question after `Down`, Pear pointed. Its walk pair |
+| `omp--v18-18-2-ask-batch-second--w120.txt` | `dialog` | `Enter` saved Pear and advanced to Color |
+| `omp--v18-18-2-ask-batch-third--w120.txt` | `dialog` | `Enter` saved Red and advanced to Size |
+| `omp--v18-18-2-ask-batch-review--w120.txt` | `dialog` | `Enter` saved Small: Pear/Red/Small recorded, a blank row, `❯ Submit`. Lifts as the review |
+| `omp--v18-18-2-ask-batch-review-unanswered--w120.txt` | `dialog` | `→ → →` from the first question with nothing answered: `3 unanswered questions; ⏎ still submits.` and `unanswered` on every row. Never lifts; takes the card |
+
+## omp 18.16.0 plan review (captured 2026-11-07, Herdr 0.9.5, 80 and 140 columns)
+
+A real plan-mode turn in a scratch repo (Claude Haiku 5.5 over OpenRouter, the `unicode` symbol preset),
+captured with `herdr pane read --source recent --format ansi`. The overlay fills the pane, so each capture
+is the whole screen. omp 18.18.0 draws the same overlay (its `plan-review-overlay.ts` is unchanged). No
+private text was present. Grammar: `omp/plan-review.ts`.
+
+| Fixture | State | What it shows |
+| --- | --- | --- |
+| `omp--v18-16-0-plan-review--w80.txt` | `dialog` | `Plan Review` box, the plan, then `Plan mode - next step` and the five options, pointer on `Approve and execute`, footer `↑/↓ select · ⏎ confirm · c copy · ⇥ regions · Ctrl+G editor · ⎋ cancel`. Lifts |
+| `omp--v18-16-0-plan-review-moved--w80.txt` | `dialog` | The same review after one `Down`, pointer on `Approve and compact context`. Its walk pair |
+| `omp--v18-16-0-plan-review-regions--w80.txt` | `dialog` | After `Tab`: focus on the plan body, the footer names scroll keys and no `⏎ confirm`. Declines, and names no way out |
+| `omp--v18-16-0-plan-review-contents--w140.txt` | `dialog` | A plan with two headings: the Contents sidebar splits the top border (`┬`) and the divider (`┴`). Lifts |
+| `omp--v18-16-0-plan-review-slider--w140.txt` | `dialog` | Two role models: the `continue with  ◂  smol  ◀ default ▶  ▸` slider and its `↳ Claude Haiku 5.5` row above the options, footer with `←/→ model`. Lifts, the tier in the question |
+| `omp--v18-16-0-plan-review-slider-moved--w140.txt` | `dialog` | The same after two `Down`, pointer on `Approve and keep context`. Its walk pair |
+| `omp--v18-16-0-plan-review-slider-clipped--w80.txt` | `dialog` | The slider at 80 columns: omp cuts the footer with `…` before `⎋ cancel`. Declines, and names no way out |
 
 ## omp's rewind picker, Esc Esc (captured 2026-10-25, omp-gang tester 04 case 7)
 
@@ -3756,6 +3936,26 @@ neutral text of the same length (`(local) example-model • max`); nothing else 
 | --- | --- | --- |
 | `pi--v150-core-permission-gate-no-cost--w200.txt` | `⚠️ Dangerous command:` over `chmod 777 gate-probe.txt`, `Allow?`, `→ Yes` / `No`, `↑↓ navigate  enter select  escape/ctrl+c cancel`; stats row `↑1.0k ↓45 0.4%/272k (auto)` with no cost | question ask, Yes / No and Cancel, walk |
 
+## pi with `❯` in column 0 of its own editor, a newline draft (issue 722)
+
+The reporter's extension keeps pi's editor and its two rules and puts `❯ ` in column 0 on the first input
+row, in the border colour; the rows under it keep two columns of lead. A draft typed with newlines then
+lines up under the glyph like a pointed list between two rules, and every send stopped at "Enter was not
+pressed". `pi--v150-gentle-quiet-two-line-draft.txt` is the screen of the report, plain text as the
+report card printed it (pi 1.5.0, herdr). The `pi--v130-quiet-prompt-*` captures are a repro of the same
+editor (an extension that subclasses `CustomEditor` and prefixes its rows), on pi 1.3.0, the version on
+the capture host, in a disposable 140 x 40 tmux server with `PI_SKIP_VERSION_CHECK=1` and no model
+configured, read with `tmux capture-pane -e -p`. Privacy: the install path in pi's no-model warning was
+replaced with neutral text of the same length; the working directory is a scratch path.
+
+| Fixture | State | What it shows |
+| --- | --- | --- |
+| `pi--v150-gentle-quiet-two-line-draft.txt` | `draft` | The report's screen: two widget boxes at column 138, blank rows, the rule, `❯ a`, `  Olá`, the rule. No styling, so no caret cell: the box stays a list, unreadable, never free |
+| `pi--v130-quiet-prompt-two-line-draft--w140.txt` | `draft` | `❯ a`, then `  Olá` with pi's caret cell (`ESC[7m` space) after it. Reads as the draft `a Olá` (`frame.draftCaret`) |
+| `pi--v130-quiet-prompt-three-line-draft--w140.txt` | `draft` | A third row, `  tudo bem`, the caret cell after it |
+| `pi--v130-quiet-prompt-three-line-cursor-up--w140.txt` | `draft` | The same draft after `Up Up`: the caret cell on the prompt row, after `a` |
+| `pi--v130-quiet-prompt-settings--w140.txt` | `dialog` | `/settings` over the same editor: a search field with its own caret cell, a `→` pointer and a key hint. Stays a dialog |
+
 ## omp 18.17.0, `/switch` and `/usage` on a phone (captured 2026-11-06, 120 columns by 40 rows, herdr 0.9.5)
 
 A reviewer reported that Collie's Chat view does not show `/usage` and `/switch` properly with omp. Each
@@ -3772,3 +3972,40 @@ token, so omp printed `unavailable` for its usage), and nothing else private was
 | `omp--v18-17-0-nerd-switch-moved--w120.txt` | `dialog` | One `Down` later: the pointer on `claude-fable-5-1`. The walk pair of the capture above |
 | `omp--v18-17-0-nerd-switch-search--w120.txt` | `dialog` | `opus-5` typed in the `nerd` picker: seven results, no rule. The way out reads `Clear search` |
 | `omp--v18-17-0-usage-dashboard--w120.txt` | `dialog` | `/usage`: a full-screen `╭─ Usage` box on the alternate screen, one account row (`unavailable`), a 53-week activity heatmap, about twenty blank rows, then `r refresh · ⏎ details · ⎋ close`. No grammar lifts it: it stays raw and takes the unread-dialog card with its Escape. The cues read `⎋ close` and, since 2026-11-06, `⏎ details` |
+
+## pi 1.5.0 in its default theme on Herdr (captured 2026-11-06, 119 columns, herdr 0.9.5)
+
+pi's default theme (no `theme` in `settings.json`, pi's "system" theme) paints with the terminal's own 16
+colours, and it gives the footer rows (working directory, usage and model) faint (SGR 2) and no colour at
+all. The pi reader asked every footer row for a colour or a rule, so a dialog on that theme came back
+unreadable, and a phone could not tap it, although the same screen with the codes removed read fine. Pi's
+rgb themes (`dark`, `light`) colour the footer and were never affected. The capture is pi's example
+`permission-gate.ts` asking about `chmod 777 gate-probe.txt`, in a pane of a real Herdr 0.9.5 session
+(command line version), read through the bridge with colour (`GET /api/pane/<id>?lines=22`, the last 22
+rows, which is why the first rows are the tail of the tool call box). The working directory is a scratch
+path with no user name. Privacy: the model label at the end of the stats row was replaced with neutral text
+of the same length (`(local) example-model  • max`); nothing else was changed.
+
+| Fixture | State | Reads as |
+| --- | --- | --- |
+| `pi--v150-herdr-system-theme-permission-gate--w119.txt` | `dialog` | `⚠️ Dangerous command:` over `chmod 777 gate-probe.txt`, `Allow?`, `→ Yes` / `No`, the hint row; the dialog rows are coloured (`38;5;5`), the three footer rows (`/private/tmp/...`, `↑1.0k ↓59 0.4%/272k (auto)`, model) are only faint. Lifts: question with Yes, No and Cancel, walk |
+
+## Codex 0.166.0 and 0.167.0 dialogs behind the trouble tally (captured 2026-11-07)
+
+The daily ping of 2026-11-07 counted 13 unread-dialog cards on `codex@0.167.0/herdr` from one solo
+install. A lab Codex 0.167.0 (and 0.166.0 beside it) ran in a Herdr pane of 120 and of 80 columns, 61
+rows, with its own `CODEX_HOME` holding the SessionStart hook Herdr's Codex integration installs. Every
+running turn read (composer found, no card); these screens did not. Privacy: the lab folder became
+`/tmp/collie-codex-lab`, and the command center's detail pane keeps only `/tmp/` and the folder's name.
+
+| Fixture | State | Reads as |
+| --- | --- | --- |
+| `codex--v0166-trust--w120.txt` | 0.166.0 folder trust, `2. Back to Agent Command Center`, `enter continue · esc back` | prompt-select, trust |
+| `codex--v0167-trust--w120.txt` | The same on 0.167.0 | prompt-select, trust |
+| `codex--v0167-trust--w80.txt` | The same at 80 columns, the paragraph on four rows | prompt-select, trust |
+| `codex--v0167-hooks-review--w120.txt` | `Hooks need review`, three rows, `›` on `1. Review hooks`, `enter confirm · esc skip` | prompt-select, trust (HOOKS_NOTES.md) |
+| `codex--v0167-hooks-review--w80.txt` | The same at 80 columns | prompt-select, trust |
+| `codex--v0167-hooks-review-moved--w80.txt` | The same after one `Down`, `›` on `2. Trust all and continue` | prompt-select, trust; the walk pair |
+| `codex--v0167-resume-tall--w120.txt` | `/resume` with one session: the title on row 1, the footer on rows 59 and 60 | menu (the title used to be out of reach) |
+| `codex--v0167-working--w120.txt` | A turn running: `• Working (4s • esc to interrupt) · 1 background terminal running`, the box, the status row, `← for agents · ? for shortcuts` | raw, composer found, no card |
+| `codex--v0167-command-center--w120.txt` | The agent command center, one task, a detail pane, `? help  esc back  ↑/↓ move  enter open  n new` | the unread-dialog card, by design |

@@ -153,6 +153,7 @@ import {
   rollbackVerdict,
   updateStartVerdict,
   type PreflightReport,
+  type UpdateStartResult,
 } from "./update-action.ts";
 import { type ReleaseLine, type UpdateLineRecord, withLine } from "./update-line.ts";
 import { parseTelemetryRequest, parseTroubleSignal, type Telemetry } from "./telemetry.ts";
@@ -207,6 +208,7 @@ import {
   type PairedDeviceWire,
   type PairingStore,
 } from "./pairing.ts";
+import { pairAuditEntry, pairRoute } from "./pair-audit.ts";
 import { createPairLimiter, pairSourceKey } from "./pair-limit.ts";
 import { LOCAL_LABEL, type LocalCredential } from "./local-secret.ts";
 import { modeForWire } from "./crew/mode.ts";
@@ -224,6 +226,8 @@ import type { SttProvider } from "./stt/provider.ts";
 import { createWhistleModelStore, type WhistleModelStore } from "./stt/whistle-model.ts";
 import { mathGet, mathRemove, mathServeRoot, mathStart } from "./math/http.ts";
 import { createMathPackStore, type MathPackStore } from "./math/store.ts";
+import { themeRegistryGet, themeRegistryRefresh } from "./themes/registry-http.ts";
+import { createThemeRegistryStore, registryUrlFromEnv, THEME_REGISTRY_URL_ENV, type ThemeRegistryStore } from "./themes/registry.ts";
 import type { CodexDetector } from "./stt/codex-detect.ts";
 import { HOST, isInside } from "./host.ts";
 import { createHostCodexDetector, sttHostGet, sttHostPut, type SttHostRouteDeps } from "./stt/host-http.ts";
@@ -485,7 +489,7 @@ export function isLoopbackPeer(address: string | null | undefined): boolean {
  * `pins` (M90) is the one segment with a read and writes: a GET lists the pins of the pane's session (a read), a
  * POST `{ itemId }` pins a block and a DELETE `?pin=<id>` drops one (writes). See `bridge/pins/routes.ts`.
  */
-const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(reply|keys|upload|close|rename|history|chat|changes|files|focus|answer|send|abort|clear|action|pins))?$/;
+const PANE_ROUTE = /^\/api\/pane\/([^/]+)(?:\/(reply|keys|upload|close|rename|history|chat|changes|files|focus|answer|send|abort|clear|action|pins|held))?$/;
 
 /**
  * A pairing claim's refusal, as an error code.
@@ -555,6 +559,14 @@ const BLOB_ROUTE = /^\/api\/blobs\/([^/]+)$/;
  * phone's reply. `bridge/crew/forward.ts` mirrors this literal one-for-one (`forward.test.ts`).
  */
 const WALKY_PANE_ROUTE = /^\/api\/pane\/([^/]+)\/walky$/;
+
+/**
+ * `POST /api/ask/<id>`: one Answer to a single-use ask (M56 spec 08), and the hook hold card's tap (spec
+ * 12). Session-scoped, so a `?host=` answer is forwarded to the member whose ask book minted the id, and
+ * the member answers it through this same route with its own gate and audit. `bridge/crew/forward.ts`
+ * mirrors this literal one-for-one (`forward.test.ts`).
+ */
+const ASK_ROUTE = /^\/api\/ask\/([^/]+)$/;
 /**
  * The two take-backs of a held walky talky message (M62 spec 03). `POST /api/walky/<id>/cancel`: the
  * sender's, for an operator message, from a paired device. `POST /api/pane/<pane>/walky/<id>/drop`: the
@@ -571,6 +583,14 @@ const WALKY_DROP_ROUTE = /^\/api\/pane\/([^/]+)\/walky\/([^/]+)\/drop$/;
  * gives up. The phone waits 75 s (web/src/lib/api.ts).
  */
 const WORKTREE_ROUTE_BUDGET_S = 90;
+
+/**
+ * How long the three update starts (`/api/update`, `/rollback`, `/back`) may hold their connection, in
+ * seconds: the forced preflight's own 30 s ceiling (`PREFLIGHT_TIMEOUT_MS` in `index.ts`) plus the
+ * launch's 8 s manager budget (`SYSTEMD_PROBE_BUDGET_MS`), rounded up. Without it Bun closes a
+ * connection that is idle for 10 s, and a launch that waited out a slow manager answered nobody.
+ */
+const UPDATE_ROUTE_BUDGET_S = 40;
 
 /**
  * `GET /api/workspace/<id>/changes` — the Changes view asked by workspace rather than by pane
@@ -711,6 +731,15 @@ export function isTopologyWrite(pathname: string, method: string): boolean {
   if (SWEEP_WAITS.has(pathname)) return true;
   const action = pathname.match(PANE_ROUTE)?.[2];
   return action === "close" || action === "rename";
+}
+
+/**
+ * Is this request the Cancel or Dismiss on a queued row, by the pane it sits on (`DELETE
+ * /api/pane/:id/held?request=<id>`, issue 740)? Only a DELETE is: a GET or a POST at `held` is no cancel
+ * and falls to the pane block's 405, so nothing but the person's tap ends a held send.
+ */
+export function isHeldCancel(pathname: string, method: string): boolean {
+  return method === "DELETE" && pathname.match(PANE_ROUTE)?.[2] === "held";
 }
 
 /** Answer `res`, and when it landed, tell `engine` an input was written (§ isPaneInput). */
@@ -1098,8 +1127,12 @@ export interface UpdateActionDeps {
   preflight: (force?: boolean) => Promise<PreflightReport | null>;
   /** Whether the updater's lock is held by a process that is still alive (spec 04's lock). */
   lockHeld: () => boolean;
-  /** Start `collie update`, detached from this process. Never awaits the update itself. */
-  start: (a: { major: boolean; runId: string }) => { ok: true } | { ok: false; reason: string };
+  /**
+   * Start `collie update`, detached from this process. Never awaits the update itself. It may await
+   * the LAUNCH decision (the bridge asks the service manager, patiently, before it picks a tier), and
+   * it may refuse with a code of its own (`refusal`) when no tier is safe (`updateLaunchRefusal`).
+   */
+  start: (a: { major: boolean; runId: string }) => UpdateStartResult | Promise<UpdateStartResult>;
   /**
    * Mint an opaque run id (M16/04). A seam because the source of randomness is index.ts's, exactly
    * as the two spawns above are — and because a test must be able to pin the id it asserts on.
@@ -1114,12 +1147,12 @@ export interface UpdateActionDeps {
    * Start `collie update --rollback --run-id <id>`, detached (M60 spec 01). Undefined disables
    * `POST /api/update/rollback`, which then answers 503 like the update route without its deps.
    */
-  rollback?: (a: { runId: string }) => { ok: true } | { ok: false; reason: string };
+  rollback?: (a: { runId: string }) => UpdateStartResult | Promise<UpdateStartResult>;
   /**
    * Start "Go back now" (M60 spec 01): `collie update --to-tag v<to> --downgrade --run-id <id>`,
    * detached. Undefined disables `POST /api/update/back`, which then answers 503.
    */
-  back?: (a: { runId: string; to: string }) => { ok: true } | { ok: false; reason: string };
+  back?: (a: { runId: string; to: string }) => UpdateStartResult | Promise<UpdateStartResult>;
 }
 
 /**
@@ -1304,6 +1337,8 @@ export function startServer(opts: {
    * with a fake fetch.
    */
   mathPack?: MathPackStore;
+  /** The community theme registry (M59 spec 06). Tests pass one over an injected fetch. */
+  themeRegistry?: ThemeRegistryStore;
   /**
    * Whether the host's `codex` is installed and signed in, for Settings' Host speech provider card
    * (ADR 0097). Absent means this function builds the real one (`codex login status`, cached); a test
@@ -1538,6 +1573,14 @@ export function startServer(opts: {
       repo: process.env.COLLIE_UPDATE_REPO?.trim() || "AltanS/collie",
       env: process.env,
     });
+  // The community theme registry (M59 spec 06): fetched only on a tap, from one fixed address on
+  // colliepwa.dev; never forwarded, like the math pack. `COLLIE_THEME_REGISTRY_URL` replaces the
+  // address for a test against a staged copy of the site; a value Collie refuses is said once here.
+  const themeRegistry = opts.themeRegistry ?? createThemeRegistryStore({
+    stateDir: cfg.stateDir,
+    version: opts.version,
+    url: registryUrlFromEnv(process.env[THEME_REGISTRY_URL_ENV], (line) => console.warn(line)),
+  });
   // The host's speech provider (ADR 0097): the same `stt.json` and model store, the gate's provider for
   // what the microphone gets, one Codex sign-in check shared by every device, one switch at a time.
   const sttHostDeps: SttHostRouteDeps = {
@@ -1988,6 +2031,27 @@ export function startServer(opts: {
       return json({ ok: true } satisfies ActionResponse, req.headers.get("accept-encoding"));
     }
 
+    // ── Ask v1 (M56 spec 08) ─────────────────────────────────────────────
+    // `POST /api/ask/<id>?session=<name>`: a tap on a dialog card, as one Answer to a single-use ask id.
+    // Write-gated through the caller's own gate. A `?host=<member>` answer is forwarded to the member
+    // whose ask book minted the id (the hook hold card on a member's pane, spec 12), refused before it
+    // is tried when that member takes no writes; the member answers it here, through its crew caller.
+    const askMatch = pathname.match(ASK_ROUTE);
+    if (askMatch && req.method === "POST") {
+      const denied = caller.gate("write");
+      if (denied) return denied;
+      const rt = await caller.resolve();
+      if (rt instanceof Response) return rt;
+      let body: JsonValue | undefined;
+      try {
+        // SAFETY: `Request.json()` output IS a JsonValue by construction; `parseAnswerBody` checks every field.
+        body = (await req.json()) as JsonValue;
+      } catch {
+        body = undefined;
+      }
+      return askRoute(rt, askMatch[1]!, body, { audit: caller.audit, device: caller.device(), redact: cfg.redact, acceptEncoding: req.headers.get("accept-encoding") });
+    }
+
     // ── Walky talky off for one session (M89 spec 04) ─────────────────────
     // The phone's switch in a pane's Messages sheet. Session-scoped, so a `?host=` set is forwarded to
     // the member that owns the pane (§21) and lands on its own `off.json`: the owner enforces the flag.
@@ -2422,6 +2486,12 @@ export function startServer(opts: {
           { method: req.method, pin: url.searchParams.get("pin"), body },
         );
         return pinsResponse(answer, req.headers.get("accept-encoding"));
+      }
+      // `DELETE /api/pane/:id/held?request=<id>`: the Cancel or Dismiss on a queued row, by the pane it
+      // sits on, so the crew link carries it to the member that holds the row (issue 740). The same
+      // answer as `DELETE /api/send/<id>?pane=<id>`, which stays for this collie's own panes.
+      if (isHeldCancel(pathname, req.method)) {
+        return heldCancelRoute(rt, url.searchParams.get("request") ?? "", paneId, { audit: audit_, device, acceptEncoding: req.headers.get("accept-encoding") });
       }
       if (action === "changes" && req.method === "GET") return paneChanges(rt.engine, paneId, url, req, homedir(), cfg.redact);
       if (action === "files" && req.method === "GET")
@@ -2899,7 +2969,8 @@ export function startServer(opts: {
             // too: the lead sees the member's panes only through its sweep, which rides this
             // engine's tick (CREW_PROTOCOL.md §10.1), so a cold lead would show the member's answer
             // up to one idle interval late. A topology write is the same case (§ isTopologyWrite).
-            const input = isPaneInput(pathname, req.method) || isTopologyWrite(pathname, req.method);
+            // An ask answer is an input too: the hold it ends must leave the phone on the next sweep.
+            const input = isPaneInput(pathname, req.method) || isTopologyWrite(pathname, req.method) || (ASK_ROUTE.test(pathname) && req.method === "POST");
             // A merged read (ADR 0127) asks with the route's own query and no phone headers, so the
             // member's answer comes back as plain bytes the lead can read.
             const askUrl = merge === undefined ? url : await merge.ask(url);
@@ -3158,26 +3229,6 @@ export function startServer(opts: {
           return text("malformed URL", 400);
         }
         return walkyPaneRoute(walky, rt.name, paneId, url.searchParams.get("limit"), req.headers.get("accept-encoding"), { audit, device: whois(req).device });
-      }
-      // ── Ask v1 (M56 spec 08) ─────────────────────────────────────────────
-      // `POST /api/ask/<id>?session=<name>`: a tap on a dialog card, as one Answer to a single-use ask
-      // id. Write-gated through the same closure a send rides; this collie's own sessions only, like
-      // `/api/send` (a crew member's pane keeps the guarded key route).
-      if (pathname.startsWith("/api/ask/") && req.method === "POST") {
-        const denied = browserGate("write");
-        if (denied) return denied;
-        if (host.kind === "member") return text("an ask answer does not cross a crew link yet", 400);
-        const rt = localRuntime(sessionName, req.headers.get("accept-encoding"));
-        if (rt instanceof Response) return rt;
-        let body: JsonValue | undefined;
-        try {
-          // SAFETY: `Request.json()` output IS a JsonValue by construction; `parseAnswerBody` checks every field.
-          body = (await req.json()) as JsonValue;
-        } catch {
-          body = undefined;
-        }
-        const askId = pathname.slice("/api/ask/".length);
-        return askRoute(rt, askId, body, { audit, device: whois(req).device, redact: cfg.redact, acceptEncoding: req.headers.get("accept-encoding") });
       }
       const sessionRouted = await serveSessionRoute(req, url, {
         // The phone's added rows are the crew's (ADR 0127 point 4): the lead's own store answers them
@@ -3634,6 +3685,9 @@ export function startServer(opts: {
         // operator's and by nothing else (ADR 0024).
         const denied = browserGate("write");
         if (denied) return denied;
+        // The forced preflight and the launch's patient manager probe can outlast Bun's 10 s idle
+        // cut, which drops the connection and loses the answer, refusal included.
+        server.timeout(req, UPDATE_ROUTE_BUDGET_S);
         const action = opts.updateAction;
         if (!action) return text("update action unavailable", 503);
         let body: JsonValue;
@@ -3662,6 +3716,9 @@ export function startServer(opts: {
           // The one gate a green preflight cannot express: a package manager owns this folder, so there is
           // nothing here Collie may replace (ADR 0035).
           installKind: status.installKind,
+          // The build this process answers the crew with, not `package.json`'s plain `current`: a
+          // development build can never hand a member the turn, so the crew's start is refused.
+          build: opts.version,
           // One confirm covers the crew (M16/03): the members' banked verdicts gate this start the
           // same way the lead's own does. Read, never fetched — the sweep is the only thing that
           // talks to a member.
@@ -3695,13 +3752,10 @@ export function startServer(opts: {
             202,
           );
         }
-        const started = action.start({ major: verdict.major, runId });
+        const started = await action.start({ major: verdict.major, runId });
         if (!started.ok) {
-          return jsonError(
-            apiError("update.start_failed", { reason: started.reason }),
-            500,
-            req.headers.get("accept-encoding"),
-          );
+          const refused = updateNotStarted(started);
+          return jsonError(refused.body, refused.status, req.headers.get("accept-encoding"));
         }
         // The peers ride the SAME confirm and the same id. Their turns are granted once this lead's
         // own health gate settles — a lead that announced a version it has not finished taking would
@@ -3735,6 +3789,9 @@ export function startServer(opts: {
         // update. The verdict is `rollbackVerdict`; the request id the phone minted IS the run id.
         const denied = browserGate("write");
         if (denied) return denied;
+        // The forced preflight and the launch's patient manager probe can outlast Bun's 10 s idle
+        // cut, which drops the connection and loses the answer, refusal included.
+        server.timeout(req, UPDATE_ROUTE_BUDGET_S);
         const action = opts.updateAction;
         if (!action?.rollback) return text("rollback action unavailable", 503);
         let body: JsonValue;
@@ -3771,13 +3828,10 @@ export function startServer(opts: {
             202,
           );
         }
-        const started = action.rollback({ runId: verdict.runId });
+        const started = await action.rollback({ runId: verdict.runId });
         if (!started.ok) {
-          return jsonError(
-            apiError("update.start_failed", { reason: started.reason }),
-            500,
-            req.headers.get("accept-encoding"),
-          );
+          const refused = updateNotStarted(started);
+          return jsonError(refused.body, refused.status, req.headers.get("accept-encoding"));
         }
         // No crew run opens here. The crew levels DOWN once this lead's own rollback is done: the
         // settle gate reads the record and `crewTurnStart` marks the run as one that goes down.
@@ -3803,6 +3857,9 @@ export function startServer(opts: {
         // ordinary way when it does not (`collie update --to-tag v<to> --downgrade`).
         const denied = browserGate("write");
         if (denied) return denied;
+        // The forced preflight and the launch's patient manager probe can outlast Bun's 10 s idle
+        // cut, which drops the connection and loses the answer, refusal included.
+        server.timeout(req, UPDATE_ROUTE_BUDGET_S);
         const action = opts.updateAction;
         if (!action?.back) return text("go back action unavailable", 503);
         let body: JsonValue;
@@ -3839,13 +3896,10 @@ export function startServer(opts: {
             202,
           );
         }
-        const started = action.back({ runId: verdict.runId, to: verdict.to });
+        const started = await action.back({ runId: verdict.runId, to: verdict.to });
         if (!started.ok) {
-          return jsonError(
-            apiError("update.start_failed", { reason: started.reason }),
-            500,
-            req.headers.get("accept-encoding"),
-          );
+          const refused = updateNotStarted(started);
+          return jsonError(refused.body, refused.status, req.headers.get("accept-encoding"));
         }
         // No crew run opens here either: the crew follows the lead's switch DOWN once it is done.
         audit.record({
@@ -4043,6 +4097,24 @@ export function startServer(opts: {
         });
         return secure(response);
       }
+      // ── The community theme registry (bridge/themes/registry-http.ts, M59 spec 06) ────────────
+      // Lead-local like the math pack: neither route reads `?host=` and neither is in the crew's
+      // FORWARDABLE list. The read needs the pairing token and is not audited; it answers the host's
+      // copy and fetches nothing. The refresh is write-gated, because it makes the host reach out,
+      // and is one audit line of route metadata: the outcome and two counts, never the body.
+      if (pathname === "/api/themes/registry") {
+        if (req.method === "GET") {
+          const denied = guard(req, cfg, "read", pairingGate);
+          if (denied) return denied;
+          return secure(await themeRegistryGet(themeRegistry));
+        }
+        if (req.method !== "POST") return text("method not allowed", 405);
+        const denied = guard(req, cfg, "write", pairingGate);
+        if (denied) return denied;
+        const { response, attempt } = await themeRegistryRefresh(themeRegistry);
+        audit.record({ action: "themes.registry.refresh", device: whois(req).device, detail: { ...attempt } });
+        return secure(response);
+      }
       // ── The host's speech provider (bridge/stt/host-http.ts, ADR 0097) ───────────────────
       // Lead-local like the routes above: neither reads `?host=` and neither is forwardable. The read
       // needs the pairing token and is not audited (Settings reads it when Voice opens). The write is
@@ -4159,7 +4231,11 @@ export function startServer(opts: {
           // name is not the person who added them. Before the watch can see the label come back.
           await forgetDevice(parsed.label, "expired-replaced");
         }
-        audit.record({ action: "pair", device: parsed.label, detail: { label: parsed.label } });
+        // One line per pairing, with where the claim came from (the address class, never the address)
+        // and the pane `collie pair` ran in. Never the code or the token (bridge/pair-audit.ts).
+        audit.record(
+          pairAuditEntry(parsed.label, pairRoute(peer, isLoopbackPeer(peer), req.headers.get("x-forwarded-for")), claimed.mintedIn),
+        );
         // The ONLY time this token exists outside the requesting device. Nothing stores it here.
         return json({ token: claimed.token, label: parsed.label }, req.headers.get("accept-encoding"));
       }
@@ -8512,6 +8588,26 @@ function jsonError(
   );
 }
 
+/** The status and body {@link updateNotStarted} answers with. */
+export interface UpdateNotStartedAnswer {
+  readonly status: number;
+  readonly body: ApiErrorBody;
+}
+
+/**
+ * The answer to an update start (`/api/update`, `/rollback`, `/back`) that did not start. A refusal the
+ * launcher decided on carries its own code: `update.manager_unreachable` is a 503, the manager is the
+ * service that is not available, and nothing was started or written. Anything else is the spawn
+ * itself failing, `update.start_failed` with its reason, as before.
+ */
+export function updateNotStarted(started: {
+  readonly reason: string;
+  readonly refusal?: "update.manager_unreachable";
+}): UpdateNotStartedAnswer {
+  if (started.refusal !== undefined) return { status: 503, body: apiError(started.refusal) };
+  return { status: 500, body: apiError("update.start_failed", { reason: started.reason }) };
+}
+
 /** The message of a thrown value, without assuming the `catch` handed us an Error. */
 function errorText<T>(err: T): string {
   return err instanceof Error ? err.message : String(err);
@@ -8950,6 +9046,8 @@ export function sendReceiptsRoute(rt: Pick<SendRouteRuntime, "send" | "driver"> 
 /** What `reportContextRoute` reads of a session runtime: a {@link SessionRuntime} is one. */
 export interface ReportRouteRuntime extends Pick<SendRouteRuntime, "send" | "engine"> {
   readonly herdr: Pick<MuxAdapter, "controlTurn" | "readGrid" | "mux">;
+  /** The session's Surface shadow, for the pane's cached binary version. Absent with the shadow off and on a program session. */
+  readonly surface?: Pick<SurfaceShadow, "cachedVersion">;
 }
 
 /** What `reportContextRoute` takes of this machine: its version, its release line and its send rows. */
@@ -8996,7 +9094,9 @@ export async function reportContextRoute(
   if (pane !== null && harness === null) return text("no such pane", 404);
   const screenable = pane !== null && rawInputRefusal(rt.herdr) === null;
   const doctor = reportDoctor(machine, harness);
-  const facts: ReportContext = { collie: machine.collie, line: machine.line, os: machine.os, arch: machine.arch, mux: rt.herdr.mux, harness, screenable };
+  // The version cache only: a report never starts a binary read.
+  const harnessVersion = harness === null || harness === "" ? null : (pane === null ? null : (rt.surface?.cachedVersion(pane, harness) ?? null));
+  const facts: ReportContext = { collie: machine.collie, line: machine.line, os: machine.os, arch: machine.arch, mux: rt.herdr.mux, harness, harnessVersion, screenable };
   const context: ReportContext = doctor === undefined ? facts : { ...facts, doctor };
   if (!wantScreen) return json(context, acceptEncoding);
   if (pane === null || !screenable) return text("this pane has no screen to include", 400);
@@ -9009,8 +9109,8 @@ export async function reportContextRoute(
 
 /**
  * `POST /api/telemetry/trouble` once the write gate passed (M86 spec 05): one trouble signal from the
- * phone. A body that is not exactly `{ kind, harness, version, mux }` in their shapes is a 400, plain
- * text, because the phone never shows it. A good body is a 204 whether or not it was counted: with the
+ * phone. A body that is not exactly `{ kind, harness, version, mux }` in their shapes, plus an optional
+ * `screen` hash on a dialog signal, is a 400, plain text, because the phone never shows it. A good body is a 204 whether or not it was counted: with the
  * ping off for any reason, nothing is stored. Undefined telemetry answers 503, like the setting route.
  */
 export function telemetryTroubleRoute(ping: Pick<Telemetry, "trouble"> | undefined, body: JsonValue | undefined): Response {
@@ -9674,7 +9774,8 @@ function gzippedBytes(
  * NOT: their names carry no hash (web/vite.config.ts), so one name is a different file in the next
  * release, and a browser that pinned it as immutable would keep the old engine after an update. They
  * revalidate like everything else; the service worker's cache-first route keeps them for the life of
- * one build. EVERYTHING else — index.html,
+ * one build. The theme marks under `marks/` carry a content hash, so they are immutable like
+ * `assets/`. EVERYTHING else — index.html,
  * sw.js, manifest.webmanifest, build-info.json, the favicons — is MUTABLE across a rebuild and must
  * always be revalidated (`no-cache`), so neither the browser NOR an intermediary reverse proxy can
  * pin a stale copy. This matters most for sw.js: a proxy that heuristically caches it (it shipped
@@ -9683,5 +9784,5 @@ function gzippedBytes(
  * but which this header prevents at the source. Pure + exported for unit tests.
  */
 export function cacheControlFor(rel: string): string {
-  return rel.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache";
+  return rel.startsWith("assets/") || rel.startsWith("marks/") ? "public, max-age=31536000, immutable" : "no-cache";
 }

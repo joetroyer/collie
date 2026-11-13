@@ -18,7 +18,7 @@ import { WorktreeReceiptStore } from "./worktree-receipts.ts";
 import { MachineAlertStore } from "./machine-alerts.ts";
 import { loadMachineHistory, saveMachineHistory } from "./machine-history.ts";
 import { machineRosterOf, MachineWatch, SOLO_MACHINE_ID } from "./machines.ts";
-import type { PushMessage } from "./push.ts";
+import { Push, type PushMessage } from "./push.ts";
 import { TrustStore } from "./crew/trust-store.ts";
 import { Snooze } from "./snooze.ts";
 import { bootSources, planPrograms, sourcesPath, type DurableSource } from "./sources.ts";
@@ -446,6 +446,9 @@ const UPDATE_STATUS_KEYS = {
   // so the golden bodies below carry neither key.
   line: true,
   back: true,
+  // The build the crew reads (2026-11-09). Optional, and ABSENT on a solo instance by construction:
+  // it is sent only while a trust store exists, so the golden bodies below carry no such key.
+  build: true,
 } satisfies Record<keyof UpdateStatus, true>;
 
 const WORKSPACE_KEYS = {
@@ -581,6 +584,9 @@ describe("solo zero-tax — wire shapes carry no crew dimension", () => {
       // Stable on the Stable line.
       "back",
       "bridgeStale",
+      // The build the crew reads (2026-11-09) — optional, and absent on a solo instance: it is sent
+      // only while a trust store exists.
+      "build",
       "checkedAt",
       "current",
       // The two bands the operator can close (M17/08): this host's offer, and the quiet notice about
@@ -744,6 +750,11 @@ describe("solo zero-tax — routes", () => {
   test("server.ts registers exactly today's routes", () => {
     expect(declaredRoutes()).toEqual([
       "/",
+      // Ask v1 (M56 spec 08): a route that legitimately extends this list, named here rather than
+      // exempted. Write-gated through the caller's own gate, and a 404 when the Send Protocol is off
+      // (COLLIE_SEND_PROTOCOL=0, on by default since spec 06). A `?host=` answer is forwarded to the
+      // member whose ask book minted the id (the hook hold card, spec 12); a solo collie has no host.
+      "/^\\/api\\/ask\\/([^/]+)$/",
       // `focus` is the pane action that moves the OPERATOR's own terminal, and it is named here for
       // the reason every other one is: a route arrives on purpose or it does not arrive.
       // One content-addressed image out of a pi/omp journal's blob store — a SOLO route that
@@ -770,7 +781,9 @@ describe("solo zero-tax — routes", () => {
       // pane whose adapter raises asks as data takes it, so a solo Herdr bridge answers it the refusal.
       // `send` and `abort` name the turn the phone saw (ADR 0101): writes, forwarded the same way, and
       // only a pane whose adapter takes guarded controls takes them; a Herdr pane gets the refusal.
-      "/^\\/api\\/pane\\/([^/]+)(?:\\/(reply|keys|upload|close|rename|history|chat|changes|files|focus|answer|send|abort|clear|action|pins))?$/",
+      // `held` (issue 740) is the Cancel or Dismiss on a queued row, by pane, so it forwards to the member
+      // whose hold queue keeps the row; on a solo collie it answers what `DELETE /api/send/<id>` does.
+      "/^\\/api\\/pane\\/([^/]+)(?:\\/(reply|keys|upload|close|rename|history|chat|changes|files|focus|answer|send|abort|clear|action|pins|held))?$/",
       // The slash commands Claude Code would load in the pane's cwd: a read of this machine's disk,
       // asked only when the palette opens, so a solo instance pays nothing per poll.
       "/^\\/api\\/pane\\/([^/]+)\\/claude-commands$/",
@@ -812,10 +825,6 @@ describe("solo zero-tax — routes", () => {
       // included, and then answers 404 instead of the SPA's app shell. Not a route of its own, and it
       // registers nothing on the crew link.
       "/api/*",
-      // Ask v1 (M56 spec 08): a SOLO route that legitimately extends this list, named here rather than
-      // exempted. Write-gated through the same closure a send rides, this collie's own sessions only,
-      // and a 404 when the Send Protocol is off (COLLIE_SEND_PROTOCOL=0, on by default since spec 06). No crew route.
-      "/api/ask/*",
       // The prompt-cache rule catalog (M28/02). A process-scoped READ, gated exactly as `/api/config`
       // is, and the only route this feature adds. Not forwarded across the crew link.
       "/api/cache-rules",
@@ -944,6 +953,10 @@ describe("solo zero-tax — routes", () => {
       // The trouble tally (M86 spec 05): the phone's one count when a trouble card showed. Solo for the
       // same reason: the bridge the phone talks to counts it under its own install.
       "/api/telemetry/trouble",
+      // The community theme registry (M59 spec 06): a SOLO route that legitimately extends this list,
+      // named here rather than exempted. Lead-local like the math pack, and not forwardable. A bridge
+      // whose operator never taps Refresh in the Theme card fetches nothing and writes nothing.
+      "/api/themes/registry",
       // Starting an update from the phone (M15/05) — a SOLO route that legitimately extends this
       // list, named here rather than exempted. Write-gated through the same closure a send rides,
       // and it registers no crew sibling: a peer is levelled from the lead's terminal
@@ -1301,6 +1314,11 @@ const STATE_DIR_ENTRIES = [
   // The pins of a session (M90): a folder, one file per session, written by use and by nothing else. Absent
   // until the first pin from a phone; a read of the list or a bridge that is merely started never makes it.
   "pins",
+  // The silent clears each push subscription was sent in the last day (bridge/push.ts, rule 4), so the
+  // daily budget survives a restart. Written after the first clear that reaches a subscription and
+  // when a row leaves: an instance nobody subscribed to push from never has it. Driven in "the clear
+  // budget appears only on use".
+  "push-clear-budget.json",
   "push-subscriptions.json",
   // The Send Protocol's request files and receipts (M56 spec 05), one per request id in this folder.
   // Created by a bridge that sends text, which is the default since spec 06: with COLLIE_SEND_PROTOCOL=0
@@ -1327,6 +1345,9 @@ const STATE_DIR_ENTRIES = [
   // last day sent, the phone's switch and the trouble tally (M86 spec 05). A NEW file; the ID and the
   // tally are deleted the moment the ping is off, and an older build ignores the file.
   "telemetry.json",
+  // The community theme registry (M59 spec 06): `<stateDir>/themes/registry.json`, the copy a tap on
+  // Refresh in the Theme card fetched. Written by that tap and by nothing else.
+  "themes",
   // The detached updater's own stdout and stderr (#283), with the run before it kept beside it as
   // `update-runner.log.1`. Absent until the first update started from the phone: the bridge opens it
   // only to hand the descriptor to the runner it spawns.
@@ -1536,6 +1557,28 @@ describe("solo zero-tax — the filesystem", () => {
       await bases.record("/home/op/repo/.worktrees/x", { base: "main", createdAt: 1 });
       expect(await readdir(stateDir)).toEqual(["worktree-bases.json"]);
       expect(STATE_DIR_ENTRIES).toContain("worktree-bases.json");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  // The same shape for push's clear budget (bridge/push.ts, rule 4): a bridge with no subscription
+  // sends nothing and writes nothing, however many alerts come and go; the first clear that reaches
+  // a subscription writes the one file.
+  test("the clear budget appears only on use: a clear that reaches a subscription", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "collie-solo-baseline-"));
+    try {
+      const push = new Push({ ...loadConfig(), stateDir }, () => Promise.resolve());
+      push["_enabled"] = true;
+      await push.loadStore();
+      await push.send({ title: "claude needs you", tag: "collie:herd:w1:p1" });
+      await push.send({ type: "clear", tag: "collie:herd:w1:p1" });
+      await push.send({ type: "clear", tag: "collie:herd" });
+      expect(await readdir(stateDir)).toEqual([]);
+      push["subs"].set("phone", { endpoint: "phone", keys: { p256dh: "p", auth: "a" } });
+      await push.send({ type: "clear", tag: "collie:herd:w1:p1" });
+      expect(await readdir(stateDir)).toEqual(["push-clear-budget.json"]);
+      expect(STATE_DIR_ENTRIES).toContain("push-clear-budget.json");
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

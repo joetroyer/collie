@@ -96,6 +96,14 @@ const MODALS_WITH_A_WAY_OUT = [
   "omp--v18-10-ask-long.txt",
   "omp--v18-10-ask-long-expanded.txt",
   "omp--v18-10-ask-revisited.txt",
+  // omp 18.18.2's batch: the current tab on a background with no bold; the review lifts only once
+  // every question has an answer, so the unanswered review is a modal that takes the card.
+  "omp--v18-18-2-ask-batch--w120.txt",
+  "omp--v18-18-2-ask-batch-moved--w120.txt",
+  "omp--v18-18-2-ask-batch-second--w120.txt",
+  "omp--v18-18-2-ask-batch-third--w120.txt",
+  "omp--v18-18-2-ask-batch-review--w120.txt",
+  "omp--v18-18-2-ask-batch-review-unanswered--w120.txt",
   // The compact model picker (`/switch`, Alt+P) in omp 18.4.10. Its footer ends `⎋ close · Alt+P task
   // model`, one segment past the way out (modal.ts header). The session state is LIFTED (omp/switch.ts)
   // and draws no card; the task-model state, the `@` quick-roles state, a search with no match and the
@@ -110,6 +118,25 @@ const MODALS_WITH_A_WAY_OUT = [
   "omp--v18-17-0-nerd-switch-search--w120.txt",
   "omp--v18-17-0-switch--w120.txt",
   "omp--v18-17-0-usage-dashboard--w120.txt",
+  // omp 18.16.0's plan review, options focused: the footer ends `· ⎋ cancel`. Lifted (omp/plan-review.ts),
+  // so these draw no card; the gate still reads the modal. The regions-focused and clipped captures
+  // name no way out and stay below.
+  "omp--v18-16-0-plan-review--w80.txt",
+  "omp--v18-16-0-plan-review-contents--w140.txt",
+  "omp--v18-16-0-plan-review-moved--w80.txt",
+  "omp--v18-16-0-plan-review-slider--w140.txt",
+  "omp--v18-16-0-plan-review-slider-moved--w140.txt",
+  // omp 18.18.0 under the `nerd` preset (2026-11-08): the batched Ask, its review (complete and unanswered),
+  // the plan review and the picker. Every footer ends in the preset's own escape keycap and its verb. The
+  // divided approval is not here in any preset: its footer ends `type to deny and steer`.
+  "omp--v18-18-0-nerd-ask-batch--w250.txt",
+  "omp--v18-18-0-nerd-ask-batch-q2--w250.txt",
+  "omp--v18-18-0-nerd-ask-batch-saved--w250.txt",
+  "omp--v18-18-0-nerd-ask-review--w250.txt",
+  "omp--v18-18-0-nerd-ask-review-unanswered--w250.txt",
+  "omp--v18-18-0-nerd-plan-review--w250.txt",
+  "omp--v18-18-0-nerd-plan-review-moved--w250.txt",
+  "omp--v18-18-0-nerd-switch--w250.txt",
 ];
 
 // The `/tree` picker is a modal that prints NO way out: omp clips its hint row and neither capture

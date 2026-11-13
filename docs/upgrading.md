@@ -255,9 +255,15 @@ After each successful update, rollback or switch, the new build runs `collie ski
 installs the WalkyTalky skill into every agent harness on this machine and updates a copy that is
 behind, so your agents know the build you now run. It prints one line per file it changed, and it
 never fails the update: if it cannot run, `update` prints one note and you run `collie skill sync`
-by hand. It leaves out a harness where you ran `collie skill uninstall`. Set `COLLIE_SKILL_SYNC=off`
-to keep your instruction files as they are; the update then prints only a note when the skill is
-behind ([Install the skill](walky-talky.md#install-the-skill)).
+by hand. It leaves out a harness where you ran `collie skill uninstall`. An update from 1.28.2 or
+earlier also moves the skill out of `AGENTS.md` and `GEMINI.md` into each harness's skills folder,
+and cuts the old block from those files. Before the cut it keeps a copy of each file as it was,
+`<file>.collie-pre-skill-move` beside it, for example `~/.codex/AGENTS.md.collie-pre-skill-move`.
+Codex needs 0.150.0 or later and Gemini CLI 0.26.0 or later to read the skill from its folder; an
+older one still reads each message, through the line typed into its pane. Set
+`COLLIE_SKILL_SYNC=off` to keep your agents' files as
+they are; the update then prints only a note when the skill is behind
+([Install the skill](walky-talky.md#install-the-skill)).
 
 #### Where the versions live
 
@@ -283,6 +289,9 @@ is detached and shallow, and it lives in a directory Herdr owns, so there is no 
 beside it, nothing to hand off, and nothing to flip back to. `--rollback` is refused there; the
 recovery path is a reinstall of a named tag
 (`herdr plugin install AltanS/collie --ref vX.Y.Z --yes`).
+
+**A rollback from 1.28 to 1.27 keeps the version 4 themes on each phone.** Adding or removing a theme
+on 1.27 drops them; [Versions](themes.md#versions) has the detail.
 
 **Rolling back from 1.8.0 to 1.7.0 needs two hand edits in the state directory.** 1.8.0 renames the
 three state files on its first start, so `~/.local/state/collie/` now holds `crew-trust.json`,

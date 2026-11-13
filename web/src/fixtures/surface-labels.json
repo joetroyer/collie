@@ -1385,6 +1385,71 @@
    "version": "2.1.302",
    "state": "dialog"
   },
+  "claude--v2319-rc-footer-idle--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.319",
+   "state": "idle"
+  },
+  "claude--v2323-rc-off-ask-single--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "dialog"
+  },
+  "claude--v2323-rc-off-idle--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "idle"
+  },
+  "claude--v2323-rc-off-permission-bash--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "dialog"
+  },
+  "claude--v2323-rc-on-ask-single--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "dialog"
+  },
+  "claude--v2323-rc-on-draft--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "draft"
+  },
+  "claude--v2323-rc-on-idle-joined--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "idle"
+  },
+  "claude--v2323-rc-on-idle-notice--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "idle"
+  },
+  "claude--v2323-rc-on-idle-usage--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "idle"
+  },
+  "claude--v2323-rc-on-permission-bash--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "dialog"
+  },
+  "claude--v2323-rc-on-rewind--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "dialog"
+  },
+  "claude--v2323-rc-on-running--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "running"
+  },
+  "claude--v2323-rc-on-slash-list--w100.txt": {
+   "harness": "claude",
+   "version": "2.1.323",
+   "state": "popup"
+  },
   "claude--wizard-multiselect-checked.txt": {
    "harness": "claude",
    "version": "unversioned",
@@ -2410,6 +2475,51 @@
    "version": "0.166.0",
    "state": "draft"
   },
+  "codex--v0166-trust--w120.txt": {
+   "harness": "codex",
+   "version": "0.166.0",
+   "state": "dialog"
+  },
+  "codex--v0167-command-center--w120.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "screen"
+  },
+  "codex--v0167-hooks-review--w120.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "dialog"
+  },
+  "codex--v0167-hooks-review--w80.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "dialog"
+  },
+  "codex--v0167-hooks-review-moved--w80.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "dialog"
+  },
+  "codex--v0167-resume-tall--w120.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "dialog"
+  },
+  "codex--v0167-trust--w120.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "dialog"
+  },
+  "codex--v0167-trust--w80.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "dialog"
+  },
+  "codex--v0167-working--w120.txt": {
+   "harness": "codex",
+   "version": "0.167.0",
+   "state": "running"
+  },
   "codex--working.txt": {
    "harness": "codex",
    "version": "unversioned",
@@ -2879,6 +2989,51 @@
    "harness": "hermes",
    "version": "0.22.2",
    "state": "popup"
+  },
+  "hermes--tui-busy-echo.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "running"
+  },
+  "hermes--tui-busy-fresh.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "running"
+  },
+  "hermes--tui-busy-title.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "running"
+  },
+  "hermes--tui-busy.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "running"
+  },
+  "hermes--tui-draft-title.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "draft"
+  },
+  "hermes--tui-draft.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "draft"
+  },
+  "hermes--tui-idle-en.txt": {
+   "harness": "hermes",
+   "version": "0.22.2",
+   "state": "idle"
+  },
+  "hermes--tui-idle-hint.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "idle"
+  },
+  "hermes--tui-idle-title.txt": {
+   "harness": "hermes",
+   "version": "unversioned",
+   "state": "idle"
   },
   "hermes--v0225-title-idle.txt": {
    "harness": "hermes",
@@ -3975,6 +4130,96 @@
    "version": "unversioned",
    "state": "running"
   },
+  "oc--v226-fresh-idle.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "idle"
+  },
+  "oc--v226-narrow--fresh-idle.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "idle"
+  },
+  "oc--v226-session-idle.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "idle"
+  },
+  "oc--v226-slash-palette.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "dialog"
+  },
+  "oc--v226-narrow--slash-palette.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "dialog"
+  },
+  "oc--v226-slash-comp.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "dialog"
+  },
+  "oc--v226-narrow--slash-comp.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "dialog"
+  },
+  "oc--v226-slash-compact.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "popup"
+  },
+  "oc--v226-narrow--slash-compact.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "popup"
+  },
+  "oc--v226-herdr--slash-models.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "popup"
+  },
+  "oc--v226-paste-200.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "draft"
+  },
+  "oc--v226-narrow--paste-200.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "draft"
+  },
+  "oc--v226-paste-600.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "draft"
+  },
+  "oc--v226-narrow--paste-600.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "draft"
+  },
+  "oc--v226-command-palette.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "dialog"
+  },
+  "oc--v226-models-picker.txt": {
+   "harness": "opencode",
+   "version": "2.2.6",
+   "state": "dialog"
+  },
+  "oc--v1195-slash-comp.txt": {
+   "harness": "opencode",
+   "version": "1.19.5",
+   "state": "dialog"
+  },
+  "oc--v1195-paste-600.txt": {
+   "harness": "opencode",
+   "version": "1.19.5",
+   "state": "draft"
+  },
   "omp--answer-editor-empty.txt": {
    "harness": "omp",
    "version": "unversioned",
@@ -4525,6 +4770,41 @@
    "version": "18.16.0",
    "state": "idle"
   },
+  "omp--v18-16-0-plan-review--w80.txt": {
+   "harness": "omp",
+   "version": "18.16.0",
+   "state": "dialog"
+  },
+  "omp--v18-16-0-plan-review-contents--w140.txt": {
+   "harness": "omp",
+   "version": "18.16.0",
+   "state": "dialog"
+  },
+  "omp--v18-16-0-plan-review-moved--w80.txt": {
+   "harness": "omp",
+   "version": "18.16.0",
+   "state": "dialog"
+  },
+  "omp--v18-16-0-plan-review-regions--w80.txt": {
+   "harness": "omp",
+   "version": "18.16.0",
+   "state": "dialog"
+  },
+  "omp--v18-16-0-plan-review-slider--w140.txt": {
+   "harness": "omp",
+   "version": "18.16.0",
+   "state": "dialog"
+  },
+  "omp--v18-16-0-plan-review-slider-clipped--w80.txt": {
+   "harness": "omp",
+   "version": "18.16.0",
+   "state": "dialog"
+  },
+  "omp--v18-16-0-plan-review-slider-moved--w140.txt": {
+   "harness": "omp",
+   "version": "18.16.0",
+   "state": "dialog"
+  },
   "omp--v18-17-0-nerd-switch--w120.txt": {
    "harness": "omp",
    "version": "18.17.0",
@@ -4545,9 +4825,89 @@
    "version": "18.17.0",
    "state": "dialog"
   },
+  "omp--v18-18-0-approval-bash--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-approval-bash--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-ask-batch--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-ask-batch-q2--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-ask-batch-saved--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-ask-review--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-ask-review-unanswered--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-plan-review--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-plan-review-moved--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-0-nerd-switch--w250.txt": {
+   "harness": "omp",
+   "version": "18.18.0",
+   "state": "dialog"
+  },
   "omp--v18-17-0-usage-dashboard--w120.txt": {
    "harness": "omp",
    "version": "18.17.0",
+   "state": "dialog"
+  },
+  "omp--v18-18-2-ask-batch--w120.txt": {
+   "harness": "omp",
+   "version": "18.18.2",
+   "state": "dialog"
+  },
+  "omp--v18-18-2-ask-batch-moved--w120.txt": {
+   "harness": "omp",
+   "version": "18.18.2",
+   "state": "dialog"
+  },
+  "omp--v18-18-2-ask-batch-review--w120.txt": {
+   "harness": "omp",
+   "version": "18.18.2",
+   "state": "dialog"
+  },
+  "omp--v18-18-2-ask-batch-review-unanswered--w120.txt": {
+   "harness": "omp",
+   "version": "18.18.2",
+   "state": "dialog"
+  },
+  "omp--v18-18-2-ask-batch-second--w120.txt": {
+   "harness": "omp",
+   "version": "18.18.2",
+   "state": "dialog"
+  },
+  "omp--v18-18-2-ask-batch-third--w120.txt": {
+   "harness": "omp",
+   "version": "18.18.2",
    "state": "dialog"
   },
   "omp--v18-4-approval-bash-moved.txt": {
@@ -6075,6 +6435,41 @@
    "version": "1.3.0",
    "state": "dialog"
   },
+  "pi--v150-gentle-review-consent--w119.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-gentle-review-consent-moved--w119.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-gentle-review-consent-fullscreen--w129.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-gentle-review-consent-fullscreen--w198.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-gentle-review-consent-regular--w69.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-gentle-review-consent-rail-beside--w198.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-gentle-review-consent-rail-tall--w198.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
   "omp--v18-6-1-queued-before-stop--w119.txt": {
    "harness": "omp",
    "version": "18.6.1",
@@ -6178,6 +6573,111 @@
   "pi--v150-core-permission-gate-no-cost--w200.txt": {
    "harness": "pi",
    "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-herdr-system-theme-permission-gate--w119.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-gentle-quiet-two-line-draft.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-idle--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "idle"
+  },
+  "pi--v150-zentui-idle--w80.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "idle"
+  },
+  "pi--v150-zentui-draft--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-draft--w80.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-multiline-draft--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-multiline-draft--w80.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-wrapped-draft--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-pipe-draft--w80.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-model-selector--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-zentui-model-selector--w80.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "dialog"
+  },
+  "pi--v150-zentui-nerd-idle--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "idle"
+  },
+  "pi--v150-zentui-nerd-draft--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v150-zentui-echo-idle--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "idle"
+  },
+  "pi--v150-zentui-native-footer-idle--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "idle"
+  },
+  "pi--v150-zentui-native-footer-draft--w120.txt": {
+   "harness": "pi",
+   "version": "1.5.0",
+   "state": "draft"
+  },
+  "pi--v130-quiet-prompt-two-line-draft--w140.txt": {
+   "harness": "pi",
+   "version": "1.3.0",
+   "state": "draft"
+  },
+  "pi--v130-quiet-prompt-three-line-draft--w140.txt": {
+   "harness": "pi",
+   "version": "1.3.0",
+   "state": "draft"
+  },
+  "pi--v130-quiet-prompt-three-line-cursor-up--w140.txt": {
+   "harness": "pi",
+   "version": "1.3.0",
+   "state": "draft"
+  },
+  "pi--v130-quiet-prompt-settings--w140.txt": {
+   "harness": "pi",
+   "version": "1.3.0",
    "state": "dialog"
   },
   "omp--v1861-core-idle--w120.txt": {

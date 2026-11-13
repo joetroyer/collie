@@ -2200,6 +2200,35 @@ describe("skill-walky-talky", () => {
     expect(finding.remedy).toContain("collie skill install all");
     expect(code).toBe(EXIT.OK);
   });
+
+  test("an old block an earlier build left in AGENTS.md is a copy behind this build (#770)", async () => {
+    const old = `# Mine\n\n<!-- collie:walky-talky v1 begin -->\nold\n${STAMP}\n<!-- collie:walky-talky v1 end -->\n`;
+    const h = harness(null, [], { files: { ...healthyFiles(), [join(HOME, ".codex", "AGENTS.md")]: old } });
+    const finding = (await findings(h)).byCheck.get("skill-walky-talky")!;
+    expect(finding.status).toBe("warn");
+    expect(finding.detail).toContain("codex");
+  });
+
+  test("an old block whose markers are damaged warns, names the file and says to cut it by hand", async () => {
+    const file = join(HOME, ".pi", "agent", "AGENTS.md");
+    const h = harness(null, [], { files: { ...healthyFiles(), [file]: "# Mine\n<!-- collie:walky-talky v1 begin -->\nhalf\n" } });
+    const finding = (await findings(h)).byCheck.get("skill-walky-talky")!;
+    expect(finding.status).toBe("warn");
+    expect(finding.detail).toContain(file);
+    expect(finding.detail).toContain("not one begin and one end");
+    expect(finding.remedy).toContain("by hand, from the first `collie:walky-talky` begin marker to the last end marker");
+  });
+
+  test("an old block Collie may not cut does not hide a stale copy in another harness", async () => {
+    const pi = join(HOME, ".pi", "agent", "AGENTS.md");
+    const h = harness(null, [], { files: { ...healthyFiles(), [SKILL]: `# older advice\n${STAMP}\n`, [pi]: "# Mine\n<!-- collie:walky-talky v1 begin -->\nhalf\n" } });
+    const finding = (await findings(h)).byCheck.get("skill-walky-talky")!;
+    expect(finding.status).toBe("warn");
+    expect(finding.detail).toContain("behind this build (claude)");
+    expect(finding.detail).toContain(pi);
+    expect(finding.remedy).toContain("collie skill install all");
+    expect(finding.remedy).toContain("by hand");
+  });
 });
 
 describe("walky-refusals", () => {
@@ -2866,6 +2895,33 @@ describe("windows-task", () => {
     expect(other.detail).toContain("D:\\other\\bin\\collie.exe, another Collie install");
     expect(run([[QUERY, { code: 1 }]]).status).toBe("skipped");
     expect(run([], ["powershell"]).status).toBe("skipped");
+  });
+
+  // #762: a PowerShell that runs past its bound said "no task is registered" on a machine whose task was fine.
+  test("a task that cannot be read in time is not 'not registered': it says so, with the time limit", () => {
+    const f = run([
+      ["schtasks /Query", { code: 1 }],
+      [QUERY, { code: 124 }],
+    ]);
+    expect(f.status).toBe("skipped");
+    expect(f.detail).toBe("could not read the task herdr.collie (PowerShell did not answer within 60s)");
+    expect(f.detail).not.toContain("registered");
+    expect(f.remedy).toBe("run `collie doctor` again, or `schtasks /query /tn herdr.collie` from a terminal");
+  });
+
+  test("a task that schtasks reads is judged without PowerShell; one that does not exist is still 'not registered'", () => {
+    const xml = `<Task><Settings><Enabled>true</Enabled></Settings><Exec><Command>C:\\conhost.exe</Command><Arguments>--headless ${BIN} _supervise</Arguments></Exec></Task>`;
+    const exec = fakeExec({ answers: [["schtasks /Query", { stdout: xml }]] });
+    const f = windowsTask({ ctx: context(), exec, host: WIN, link: fakeLinkFs() });
+    expect(f.status).toBe("ok");
+    expect(f.detail).toBe(`Task herdr.collie runs ${BIN} (registered)`);
+    expect(exec.calls.some((c) => c.startsWith("powershell"))).toBe(false);
+
+    const none = run([
+      ["schtasks /Query", { code: 1 }],
+      [QUERY, { code: 1 }],
+    ]);
+    expect(none.detail).toBe("no task herdr.collie is registered");
   });
 });
 

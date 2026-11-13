@@ -5,6 +5,7 @@ import { encodeStyledRegion, styledRegionLines } from "../web/src/lib/styled-reg
 
 import {
   afterPaneInput,
+  isHeldCancel,
   isPaneInput,
   isTopologyWrite,
   freeSpaceName,
@@ -86,6 +87,7 @@ import {
   arrivedOverHttps,
   chatBodyForMux,
   telemetryTroubleRoute,
+  updateNotStarted,
 } from "./server.ts";
 import { createTelemetry, readTelemetryRecord, telemetryPath, type TroubleSignal } from "./telemetry.ts";
 import {
@@ -2637,6 +2639,11 @@ describe("cacheControlFor", () => {
     expect(cacheControlFor("assets/index-abc.css")).toBe("public, max-age=31536000, immutable");
   });
 
+  test("the hashed theme marks under marks/ are immutable too", () => {
+    expect(cacheControlFor("marks/kawaii-mark-DkeR4B3b.js")).toBe("public, max-age=31536000, immutable");
+    expect(cacheControlFor("marks/pixel-mark-axLcestm.js")).toBe("public, max-age=31536000, immutable");
+  });
+
   test("the math engines under math/ carry no hash, so they revalidate", () => {
     for (const rel of [
       "math/math-markup.js",
@@ -3665,11 +3672,12 @@ describe("the host gate — `?host=` selects among enrolled members and nothing 
     // read that checks a typed line before it runs (ADR 0095, amendment), and a durable program's
     // conversation list and the items or reopen of one (M53 spec 11), and Sent's read and its two
     // writes, served by one function with one resolve for the read and one for the writes (ADR 0107),
-    // and the New page's folder browser (#467), and a session's walky talky off switch (M89 spec 04)) reach their runtime through the caller's resolver and
+    // and the New page's folder browser (#467), and a session's walky talky off switch (M89 spec 04), and an
+    // answer to an ask by id, the hook hold card's tap on a member's pane (M56 spec 12)) reach their runtime through the caller's resolver and
     // nothing else. One of them, the launcher rows, hands the resolver the lead's merge (ADR 0127), and
     // two, the launch and the branch create, hand it the lead's row carry (ADR 0127 point 3).
     const carry = String.raw`undefined, leadRowCarry\(allowedLaunchers, homedir\(\)\)`;
-    expect([...src.matchAll(new RegExp(String.raw`await caller\.resolve\((?:leadRows|${carry})?\);`, "g"))]).toHaveLength(28);
+    expect([...src.matchAll(new RegExp(String.raw`await caller\.resolve\((?:leadRows|${carry})?\);`, "g"))]).toHaveLength(29);
     expect([...src.matchAll(/await caller\.resolve\(leadRows\);/g)]).toHaveLength(1);
     expect([...src.matchAll(new RegExp(String.raw`await caller\.resolve\(${carry}\);`, "g"))]).toHaveLength(2);
     // Exactly eight `registry.get(` calls remain, and each is a sanctioned one, named here rather
@@ -3790,10 +3798,12 @@ describe("the update write gate — POST api/update rides the pane path's own ga
     const src = readFileSync(join(import.meta.dir, "server.ts"), "utf8");
     const updateAt = src.indexOf('if (pathname === "/api/update" && req.method === "POST")');
     const handler = src.slice(updateAt, src.indexOf("\n      }\n", updateAt));
-    // The handoff is a plain call — nothing here awaits the child, and the answer carries the 202
-    // that says "started", not the 200 that would say "finished".
-    expect(handler).toContain("const started = action.start({ major: verdict.major, runId });");
-    expect(handler).not.toContain("await action.start");
+    // Nothing here awaits the child, and the answer carries the 202 that says "started", not the 200
+    // that would say "finished". The `await` is the LAUNCH decision (the bridge asks the service
+    // manager, patiently, before it picks a tier: 1.28.1 rehearsal d-B); `start` never waits on the
+    // runner itself, and its own seam (`launchUpdateRunner`) spawns and returns.
+    expect(handler).toContain("const started = await action.start({ major: verdict.major, runId });");
+    expect(handler).not.toContain(".exited");
     expect(handler).toContain("202,");
   });
 
@@ -3808,8 +3818,7 @@ describe("the update write gate — POST api/update rides the pane path's own ga
     // Forced preflight, the pure verdict, and a plain call into the spawn.
     expect(handler).toContain("await action.preflight(true)");
     expect(handler).toContain("rollbackVerdict(parsed, {");
-    expect(handler).toContain("const started = action.rollback({ runId: verdict.runId });");
-    expect(handler).not.toContain("await action.rollback");
+    expect(handler).toContain("const started = await action.rollback({ runId: verdict.runId });");
     // No crew run: a rollback levels nobody.
     expect(handler).not.toContain("beginCrewRun");
     expect(handler).toContain("202,");
@@ -3823,10 +3832,37 @@ describe("the update write gate — POST api/update rides the pane path's own ga
     expect(handler).toContain('const denied = browserGate("write");');
     expect(handler).toContain("await action.preflight(true)");
     expect(handler).toContain("backVerdict(parsed, {");
-    expect(handler).toContain("const started = action.back({ runId: verdict.runId, to: verdict.to });");
-    expect(handler).not.toContain("await action.back");
+    expect(handler).toContain("const started = await action.back({ runId: verdict.runId, to: verdict.to });");
     expect(handler).not.toContain("beginCrewRun");
     expect(handler).toContain("202,");
+  });
+
+  test("the three update starts hold their connection past Bun's idle cut and answer a refusal by its own code", () => {
+    // The forced preflight plus the launch's patient manager probe can outlast Bun's 10 s idle cut,
+    // which would drop the connection and the refusal with it (1.28.1 rehearsal d-B).
+    const src = readFileSync(join(import.meta.dir, "server.ts"), "utf8");
+    for (const route of ['"/api/update"', '"/api/update/rollback"', '"/api/update/back"']) {
+      const at = src.indexOf(`if (pathname === ${route} && req.method === "POST")`);
+      expect(at).toBeGreaterThan(0);
+      const handler = src.slice(at, src.indexOf("\n      }\n", at));
+      expect(handler).toContain("server.timeout(req, UPDATE_ROUTE_BUDGET_S);");
+      expect(handler).toContain("const refused = updateNotStarted(started);");
+      expect(handler).not.toContain('apiError("update.start_failed"');
+    }
+  });
+
+  test("updateNotStarted: the launcher's refusal is a 503 with its code; a failed spawn stays update.start_failed", () => {
+    expect(updateNotStarted({ reason: "ignored", refusal: "update.manager_unreachable" })).toEqual({
+      status: 503,
+      body: {
+        code: "update.manager_unreachable",
+        error: "the update could not start: the service manager did not answer; run `collie update` in a shell on this machine",
+      },
+    });
+    expect(updateNotStarted({ reason: "spawn ENOENT" })).toEqual({
+      status: 500,
+      body: { code: "update.start_failed", error: "the update could not be started: spawn ENOENT", detail: { reason: "spawn ENOENT" } },
+    });
   });
 
   test("api/update/line: a read-gated GET, a write-gated POST with a receipt, and the switch installs nothing (M60 spec 01)", () => {
@@ -3927,6 +3963,27 @@ describe("the update write gate — POST api/update rides the pane path's own ga
           expect(await res.text()).toBe("telemetry.trouble_invalid");
         }
         expect(readTelemetryRecord(dir).trouble).toEqual([]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    test("a dialog signal with a screen hash is a 204 and counts on its own row; a send with one is a 400 (1.27.4)", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "collie-trouble-route-"));
+      try {
+        const ping = telemetryIn(dir);
+        const dialog = { kind: "dialog", harness: "codex", version: "0.167.0", mux: "herdr" } as const;
+        expect(telemetryTroubleRoute(ping, { ...dialog, screen: "634c6530" }).status).toBe(204);
+        expect(telemetryTroubleRoute(ping, { ...dialog }).status).toBe(204);
+        for (const body of [{ ...SIGNAL, screen: "634c6530" }, { ...dialog, screen: "ENTER" }, { ...dialog, screen: "634c6530", row: "enter select" }]) {
+          const res = telemetryTroubleRoute(ping, body);
+          expect(res.status).toBe(400);
+          expect(await res.text()).toBe("telemetry.trouble_invalid");
+        }
+        expect(readTelemetryRecord(dir).trouble).toEqual([
+          { ...dialog, screen: "634c6530", count: 1 },
+          { ...dialog, count: 1 },
+        ]);
       } finally {
         await rm(dir, { recursive: true, force: true });
       }
@@ -5350,6 +5407,20 @@ describe("update status peers — the legs of a crew-wide run", () => {
     expect(peersBranch.slice(0, peersBranch.indexOf("return json"))).not.toContain("action.start");
   });
 
+  test("the verdict reads the build this process answers the crew with, and a refusal queues no leg", () => {
+    // `status.current` is `package.json`'s plain version and never says `-dev`; `opts.version` is the
+    // build the crew reads. A development build refuses as `update.dev_lead` (2026-11-09), and the
+    // refusal returns before the run id is minted or any crew run begins.
+    const src = readFileSync(join(import.meta.dir, "server.ts"), "utf8");
+    const updateAt = src.indexOf('if (pathname === "/api/update" && req.method === "POST")');
+    const handler = src.slice(updateAt, src.indexOf("\n      }\n", updateAt));
+    expect(handler).toContain("build: opts.version,");
+    const refusedAt = handler.indexOf('if (verdict.kind === "refuse")');
+    expect(refusedAt).toBeGreaterThan(0);
+    expect(refusedAt).toBeLessThan(handler.indexOf("action.newRunId()"));
+    expect(refusedAt).toBeLessThan(handler.indexOf("action.beginCrewRun?."));
+  });
+
   test("both 202s carry the id this confirm minted, beside the record read before the start", () => {
     // `run` in the 202 is `status.run`, read BEFORE the start: on a lead that has updated before it is
     // the LAST run's record, and the new run writes its own a beat later. So the new run's id travels
@@ -5545,6 +5616,20 @@ describe("an input written to a pane makes its engine hot", () => {
     }
   });
 
+  // Issue 740: the Cancel or Dismiss on a crew member's queued row rides the pane route. Only a DELETE
+  // ends a held send; any other method at `held` is answered 405 by the pane block.
+  test("isHeldCancel takes a DELETE at a pane's held route and nothing else", () => {
+    expect(isHeldCancel("/api/pane/w1%3Ap1/held", "DELETE")).toBe(true);
+    for (const method of ["GET", "HEAD", "POST", "PUT"]) expect(isHeldCancel("/api/pane/w1%3Ap1/held", method)).toBe(false);
+    expect(isHeldCancel("/api/pane/w1%3Ap1/held/req00001", "DELETE")).toBe(false);
+    expect(isHeldCancel("/api/pane/w1%3Ap1", "DELETE")).toBe(false);
+    expect(isHeldCancel("/api/pane/w1%3Ap1/pins", "DELETE")).toBe(false);
+    expect(isHeldCancel("/api/send/req00001", "DELETE")).toBe(false);
+    // The gate asks for an authorised device on every method at `held`, a GET included.
+    expect(paneGateLevel("held", "GET")).toBe("write");
+    expect(paneGateLevel("held", "DELETE")).toBe("write");
+  });
+
   test("afterPaneInput tells the engine only when the write landed, and hands the response back", () => {
     let noted = 0;
     const engine = { noteInput: () => void noted++ };
@@ -5561,7 +5646,8 @@ describe("an input written to a pane makes its engine hot", () => {
     expect(src).toContain("return afterPaneInput(rt.engine, await replyPane(");
     expect(src).toContain("return afterPaneInput(rt.engine, await keysPane(");
     // On the lead: the forward's answer, so the lead's sweep follows the member it typed into.
-    expect(src).toContain("const input = isPaneInput(pathname, req.method) || isTopologyWrite(pathname, req.method);");
+    // An ask answer counts too (M56 spec 12): the hold it ends on a member must leave the phone on the next sweep.
+    expect(src).toContain("const input = isPaneInput(pathname, req.method) || isTopologyWrite(pathname, req.method) || (ASK_ROUTE.test(pathname) && req.method === \"POST\");");
     expect(src).toContain("return input && own !== undefined ? afterPaneInput(own, forwarded) : forwarded;");
     expect([...src.matchAll(/afterPaneInput\(/g)]).toHaveLength(4); // the definition and three calls
   });

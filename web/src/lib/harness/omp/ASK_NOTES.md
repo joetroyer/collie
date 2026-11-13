@@ -35,6 +35,12 @@ The same box in the other two keycap dialects:
 | text keycaps (17.x) | `Enter select · n note · ↑/↓ move · Esc cancel` | `❯` | `○` | `omp--select-menu.txt` |
 | Nerd Font (`nerd`) | `U+F0311 select · n note · ↑/↓ move · U+F12B7 cancel` | U+F054 | U+F10C | `omp--select-menu-other.txt` |
 
+A batch under the Nerd Font preset (omp 18.18.0, `omp--v18-18-0-nerd-ask-*--w250.txt`, 2026-11-08) prints
+the tab segment as `U+F0312/←/→ question`, a saved answer as U+F192 (`radio.selected`), and the review as
+`U+F0311 submit · ↑/↓ scroll · U+F12B7 cancel` over `U+F054 Submit`. The glyphs live in `omp/keycaps.ts`,
+and every one of them must come from the same preset as the footer. The text keycaps of 17.x never drew a
+batch in a capture, so a batch footer in that dialect declines.
+
 A row with a saved note ends in `  ✎ note` (`omp--select-menu-noted.txt`).
 
 An option with a `description` prints it on rows of its own under the label, six columns in,
@@ -215,6 +221,19 @@ declines rather than offering answers on unrecognised long-text controls (ask.te
 Corpus: `omp--v18-16-0-ask-single-glyph-hide*--w200.txt`, `omp--v18-16-0-answer-editor-empty--w200.txt`.
 Probed on the host: `Down` moved the pointer one row; `Enter` on `Other` opened the answer editor;
 `Escape` returned to the dialog.
+
+## omp 18.18: a batch's current tab on a background alone (2026-11-09)
+
+omp 18.18 paints the current question tab with a background and no bold; 18.10 drew it bold on a
+background, and `readTabs` required both, so every 18.18 batch declined even on a styled read. The
+current tab is now the one label whose every cell carries a background. Two labels painted, a label
+painted in part, or a background past the current label's one padding cell (over the border, a
+neighbour, the whole row) declines: a theme that paints every tab is unreadable rather than guessed.
+omp 18.18's review adds `N unanswered questions; ⏎ still submits.` and marks each open question
+`unanswered`. Only a complete review submits, so both the warning row and an `unanswered` value decline.
+Corpus: `omp--v18-18-2-ask-batch*--w120.txt` (tmux `capture-pane -e`). On herdr-core the read is plain
+until herdr-core #74 (`terminal.read` `format: "ansi"`) ships and the adapter asks for it, so a batch
+there still shows the card with Escape.
 
 ## omp 18.12.6: option previews (2026-10-25)
 

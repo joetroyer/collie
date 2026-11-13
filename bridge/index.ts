@@ -81,7 +81,7 @@ import { spaceFolders } from "./space-view.ts";
 import { WorktreeReceiptStore } from "./worktree-receipts.ts";
 import { LaunchReceiptStore } from "./launch-receipts.ts";
 import { LaunchWindow, foregroundHarnessOf } from "./launch-window.ts";
-import { createPaneProfile, procProbe, sharedForegroundRead } from "./pane-binary.ts";
+import { createPaneProfile, createPaneVersion, procProbe, sharedForegroundRead } from "./pane-binary.ts";
 import { StarterReceiptStore } from "./starter-launch.ts";
 import { AnswerReceiptStore } from "./durable/answer.ts";
 import { ControlReceiptStore } from "./durable/control.ts";
@@ -259,8 +259,17 @@ import {
   PreflightCache,
   preflightCommand,
   updateCadenceTick,
+  updateLaunchRefusal,
   updateStartCommand,
+  type UpdateStartResult,
 } from "./update-action.ts";
+import { apiError } from "./error-codes.ts";
+import {
+  insideOwnUnit,
+  systemdUserSession,
+  systemdUserSessionAsync,
+  type SystemdUserSession,
+} from "./systemd-user.ts";
 import { collieVersion, collieVersionBare } from "./version.ts";
 import { SurfaceShadow, type ShadowOptions } from "./surface/shadow.ts";
 import { AskAnswerer, AskBook } from "./surface/ask.ts";
@@ -276,7 +285,7 @@ import { deliverEdge, EdgeRouter, type EdgeTarget } from "./surface/edges.ts";
 import { counterWordOf, HoldBook, HoldServer, takeHold, type HoldTarget } from "./surface/hold.ts";
 import { holdSocketPath } from "./beacon/paths.ts";
 import { VersionCache } from "./surface/binary-version.ts";
-import { findProfile, loadProfiles } from "../web/src/lib/surface/profile.ts";
+import { findProfile, loadProfiles, type Profile } from "../web/src/lib/surface/profile.ts";
 import { labelOf } from "./walky/address.ts";
 import {
   crewSkipped,
@@ -1038,6 +1047,9 @@ function inodeOrNull(p: string): number | null {
 const updateMonitor = new UpdateMonitor({
   repo: updateRepo,
   current: currentVersion,
+  // The crew's reading of this machine, so the phone judges a crew run on the build the crew sees.
+  // Only while a trust store exists: a solo instance's snapshot gains no field (§11).
+  build: () => (trustStore.current() === null ? null : crewVersion),
   installKind,
   instance: collieInstance,
   // Named only where it is true: a packaged install under a prefix we recognise. Every other kind
@@ -1163,6 +1175,121 @@ const preflightCache = new PreflightCache({
   now: Date.now,
   run: () => runPreflight(preflightCommand(collieBinary)),
 });
+
+/**
+ * How long the bus probe may take. Synchronous, because the launch is: a wedged D-Bus is the one
+ * failure that must not park the event loop, and a manager that cannot answer inside this bound is
+ * one a `systemd-run` handoff would not have survived either.
+ */
+const SYSTEMD_PROBE_TIMEOUT_MS = 2_000;
+
+/**
+ * The whole time the launch may spend asking the manager, the first pass above included. A first
+ * pass that found nothing is asked again ONCE, awaited, with what is left of this (1.28.1 rehearsal
+ * d-B: a wedged bus answered in 3 s, against the 2 s limit, and was read as "no manager"). Under the
+ * update route's own hold on the connection (`UPDATE_ROUTE_BUDGET_S` in `server.ts`) with room for
+ * the forced preflight, and under the phone's 20 s mutation deadline in the common case.
+ */
+const SYSTEMD_PROBE_BUDGET_MS = 8_000;
+
+/**
+ * Can this process ask the systemd user manager for a transient unit — and, when only the derived
+ * session dir reaches it, what must the spawned `systemd-run` client carry?
+ *
+ * The bridge's half of `cli/lifecycle.ts`'s question, asked through the same predicate
+ * (`bridge/systemd-user.ts`). It used to be `Bun.which("systemd-run") !== null` alone, and that is
+ * how the phone's update tap came to spawn a client that printed "Failed to connect to bus" and
+ * died without ever creating a unit: a Herdr plugin's environment carries no login shell, and
+ * `XDG_RUNTIME_DIR` can be a live-but-wrong value (WSLg's) that no user manager answers on.
+ */
+function systemdSessionFirstPass(): SystemdUserSession {
+  return systemdUserSession(
+    (envAdd) => {
+      if (Bun.which("systemctl") === null) return { found: false, code: 127 };
+      try {
+        const r = Bun.spawnSync(["systemctl", "--user", "show-environment"], {
+          env: { ...process.env, ...envAdd },
+          stdout: "ignore",
+          stderr: "ignore",
+          timeout: SYSTEMD_PROBE_TIMEOUT_MS,
+          killSignal: "SIGKILL",
+        });
+        const timedOut = r.exitedDueToTimeout === true;
+        return { found: true, code: timedOut ? 124 : (r.exitCode ?? 124) };
+      } catch {
+        return { found: false, code: 127 };
+      }
+    },
+    process.env,
+    process.getuid?.() ?? 0,
+  );
+}
+
+/**
+ * One `systemctl --user show-environment`, awaited and killed at `deadline` (an epoch ms). The
+ * patient pass's probe: the same command and the same environment layering as the first pass, as a
+ * child the event loop waits on instead of a `spawnSync` that would freeze every other request.
+ */
+async function probeSystemctlUntil(
+  envAdd: Readonly<Record<string, string>> | null,
+  deadline: number,
+): Promise<{ found: boolean; code: number }> {
+  if (Bun.which("systemctl") === null) return { found: false, code: 127 };
+  const left = deadline - Date.now();
+  if (left <= 0) return { found: true, code: 124 };
+  let child;
+  try {
+    child = Bun.spawn(["systemctl", "--user", "show-environment"], {
+      env: { ...process.env, ...envAdd },
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  } catch {
+    return { found: false, code: 127 };
+  }
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, left);
+  try {
+    const code = await child.exited;
+    return { found: true, code: timedOut ? 124 : code };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * {@link systemdSessionFirstPass}, then, when it reached no manager and `systemd-run` is on disk, ONE
+ * more pass with the rest of {@link SYSTEMD_PROBE_BUDGET_MS}, awaited. Without `systemd-run` a second
+ * answer could not change the plan, so it is not asked. A host with no user manager fails both
+ * passes in milliseconds ("Failed to connect to bus"); only a manager that is slow pays the wait.
+ */
+async function systemdSessionForLaunch(): Promise<SystemdUserSession> {
+  const deadline = Date.now() + SYSTEMD_PROBE_BUDGET_MS;
+  const first = systemdSessionFirstPass();
+  if (first.reachable || Bun.which("systemd-run") === null) return first;
+  return systemdUserSessionAsync((envAdd) => probeSystemctlUntil(envAdd, deadline), process.env, process.getuid?.() ?? 0);
+}
+
+/**
+ * Whether this bridge is the process of its own systemd unit (`collie.service`, `collie-<instance>
+ * .service`): read off `/proc/self/cgroup` by `insideOwnUnit`, which says why that file and not
+ * `INVOCATION_ID`. No file (macOS, Windows) reads as not supervised.
+ */
+function bridgeInsideOwnUnit(): boolean {
+  if (HOST.platform !== "linux") return false;
+  let cgroup: string | null;
+  try {
+    cgroup = readFileSync("/proc/self/cgroup", "utf8");
+  } catch {
+    cgroup = null;
+  }
+  return insideOwnUnit(cgroup, `collie${instanceSuffixOf(collieInstance)}`);
+}
+
 /**
  * Start the detached updater. **The one spawner in this process** — the phone's button takes it, and
  * so does a peer following its lead (M16/04), because two spawners would be two answers to "what
@@ -1174,14 +1301,26 @@ const preflightCache = new PreflightCache({
  * a binary install checks the release manifest and this platform's `sha256`, and on a checkout
  * fetches `refs/tags/<tag>` explicitly. Nothing here adds a second mechanism.
  */
-const startDetachedUpdate = (a: {
+const startDetachedUpdate = async (a: {
   major: boolean;
   runId: string;
   toTag?: string | null;
   rollback?: boolean;
   downgrade?: boolean;
   line?: ReleaseLine | null;
-}) => {
+}): Promise<UpdateStartResult> => {
+  // One probe, two answers: whether the systemd tier may be taken, and the session variables the
+  // `systemd-run` client needs when only the derived default reached the manager.
+  const session = await systemdSessionForLaunch();
+  const hasSystemdRun = Bun.which("systemd-run") !== null && session.reachable;
+  // A bridge that IS its unit's process and cannot reach the manager starts nothing: the `setsid`
+  // runner would stay in this cgroup and be stopped with the service by its own restart (1.28.1
+  // rehearsal d-B). Answered before the runner log is opened, so nothing on disk moves.
+  const refusal = updateLaunchRefusal({ platform: HOST.platform, hasSystemdRun, supervised: bridgeInsideOwnUnit() });
+  if (refusal !== null) {
+    console.warn("[update] not started: this bridge runs as its systemd unit and the user manager did not answer");
+    return { ok: false, reason: apiError(refusal).error, refusal };
+  }
   const plan = updateStartCommand({
     platform: process.platform,
     binary: collieBinary,
@@ -1190,17 +1329,28 @@ const startDetachedUpdate = (a: {
     downgrade: a.downgrade === true,
     line: a.line ?? null,
     stamp: String(Date.now()),
-    hasSystemdRun: Bun.which("systemd-run") !== null,
+    hasSystemdRun,
     hasSetsid: Bun.which("setsid") !== null,
     runId: a.runId,
     toTag: a.toTag ?? null,
     mirror: mirrorValue(process.env),
     env: process.env,
+    envAdd: session.envAdd,
   });
   // THE RUNNER'S OWN OUTPUT IS KEPT (#283): a runner that dies before it writes a run record used to
   // leave nothing behind at all.
   const log = openRunnerLog(cfg.stateDir, `${new Date().toISOString()} ${plan.command.join(" ")}`);
-  return launchUpdateRunner(plan, { cwd: rootDir, spawn: (command, options) => Bun.spawn(command, options), log });
+  return launchUpdateRunner(plan, {
+    cwd: rootDir,
+    // The plan's env is a LAYER, never a replacement: every other tier and every other variable
+    // keep the environment this process has. Only the systemd client ever gets one.
+    spawn: (command, options) =>
+      Bun.spawn(
+        command,
+        options.env === undefined ? options : { ...options, env: { ...process.env, ...options.env } },
+      ),
+    log,
+  });
 };
 
 /**
@@ -1499,22 +1649,26 @@ if (sendStore !== null) {
   if (recoveredAsks.length > 0) console.log(`[ask] ${String(recoveredAsks.length)} ask answer(s) left unsettled by the last run read as unknown`);
   sendStore.prune();
 }
+// The Surface counters (M56 spec 09): one ledger for the bridge, a day file under `<stateDir>/surface/`.
+// Created with either flag, so an instance that computes no Surface touches no new file. It never
+// blocks a send and never changes a verdict. Made before the hold queue, whose start counts expired sends.
+const surfaceLedger = cfg.sendProtocol || cfg.surfaceShadow ? new SurfaceLedger(cfg.stateDir) : null;
 // The hold queue (M56 spec 15): a send the harness cannot take during its turn waits here, one file per
 // request under `<stateDir>/held/`, and is replayed on start. A request that was going out when the
 // last run stopped was settled `unknown` above; its row ends with that, the text kept for a Resend.
 const holdStore = sendStore === null ? null : new HoldStore(join(cfg.stateDir, "held"));
 if (holdStore !== null && sendStore !== null) {
   const changed = SendProtocol.reconcileHolds(holdStore, sendStore);
+  // A request whose budget ran out while the bridge was down ends at its own expiry, never at the first poll (issue 740).
+  const expired = SendProtocol.expireHoldsOnStart(holdStore, sendStore, Date.now(), surfaceLedger ?? undefined);
+  if (expired.ended.length > 0) console.log(`[send] hold queue: ${String(expired.ended.length)} request(s) ran out their budget while the bridge was down, ended expired: ${expired.ended.join(", ")}`);
+  if (expired.dropped.length > 0) console.log(`[send] hold queue: ${String(expired.dropped.length)} expired row(s) past the keep window dropped, not replayed: ${expired.dropped.join(", ")}`);
   const waiting = holdStore.list().filter((entry) => entry.state === "held").length;
   if (changed > 0 || waiting > 0) console.log(`[send] hold queue replayed: ${String(waiting)} held, ${String(changed)} row(s) settled after the last run`);
 }
 // Walky talky's last word before a held send goes out (M62 spec 02), set once its service exists below:
 // a message meant for a pane instance that is gone never reaches the pane that took its id.
 let walkyReleaseCheck: ((requestId: string, session: string, paneId: string) => boolean) | null = null;
-// The Surface counters (M56 spec 09): one ledger for the bridge, a day file under `<stateDir>/surface/`.
-// Created with either flag, so an instance that computes no Surface touches no new file. It never
-// blocks a send and never changes a verdict.
-const surfaceLedger = cfg.sendProtocol || cfg.surfaceShadow ? new SurfaceLedger(cfg.stateDir) : null;
 // The hook edges (M56 spec 11): the harness's own hook writes one file per event into
 // `<stateDir>/edges/`, and this router places each on one pane of a terminal session. Built with the
 // Surface, so an instance that computes no Surface takes no edge. Each session that can take edges
@@ -1568,10 +1722,14 @@ const SURFACE_PLATFORM = surfacePlatform({
   },
 });
 /**
- * A harness's profile at its version, for the send path: of the pane's own program when the pane's
- * foreground read shows it, else of the PATH binary (bridge/pane-binary.ts, ADR 0124).
+ * The pane's agent version, one reader for the send path and the Surface shadow over one cache: of the
+ * pane's own program when the pane's foreground read shows it, else of the PATH binary
+ * (bridge/pane-binary.ts, ADR 0124). A binary the login PATH misses still names its version in the
+ * send, the shadow, the report and the trouble count, and both keep one last answer per pane.
+ * `sendProfile` is the send path's profile at that version.
  */
-const sendProfile = createPaneProfile({ versions: sendVersions, binaries: harnessBinaries, probe: procProbe(), platform: SURFACE_PLATFORM });
+const paneVersion = createPaneVersion({ versions: sendVersions, binaries: harnessBinaries, probe: procProbe() });
+const sendProfile = createPaneProfile({ versions: sendVersions, binaries: harnessBinaries, platform: SURFACE_PLATFORM, paneVersion });
 
 const makeSession: SessionFactory = (name, endpoint, isPrimary) => {
   const built = endpoint.kind === "program" ? programAdapter(endpoint.source) : terminalAdapter(endpoint.socketPath);
@@ -1725,7 +1883,18 @@ const makeSession: SessionFactory = (name, endpoint, isPrimary) => {
   // The session's single-use ask ids (M56 spec 08): the poll's Surface, the Send Protocol's reads and
   // the answer route all lift through this one book, so the id on the phone is the id the route knows.
   const askBook = sends ? new AskBook() : undefined;
-  const shadowOptions: ShadowOptions = { mux: herdr, pollMs: cfg.pollMs, compare: cfg.surfaceShadow && !cfg.sendProtocol, ledger: surfaceLedger ?? undefined };
+  // The pane's foreground read, bounded and shared by the reads of one send (the launch window's and the
+  // profile's version read) and by the shadow's version read; absent where the multiplexer has none
+  // (tmux, zellij, tuios).
+  const foregroundRead = sharedForegroundRead(herdr.foregroundProcesses?.bind(herdr));
+  const shadowVersion = async (profile: Profile, paneId?: string): Promise<string | null> => (await paneVersion(profile, paneId, foregroundRead)).version;
+  const shadowOptions: ShadowOptions = {
+    mux: herdr,
+    pollMs: cfg.pollMs,
+    compare: cfg.surfaceShadow && !cfg.sendProtocol,
+    ledger: surfaceLedger ?? undefined,
+    version: shadowVersion,
+  };
   const surface = computeSurface
     ? new SurfaceShadow(askBook === undefined ? shadowOptions : { ...shadowOptions, asks: { book: askBook, generation: generationOf } })
     : undefined;
@@ -1746,6 +1915,8 @@ const makeSession: SessionFactory = (name, endpoint, isPrimary) => {
         }
         // A queued send whose text a read shows back in the box (ADR 0122): its card says so.
         send?.tickQueued(name, (paneId) => surface.boxOf(paneId));
+        // A held row that ended with its text in the box goes once two reads show that box empty (#739).
+        send?.tickTyped(name, (paneId) => surface.boxOf(paneId), (paneId) => surface.surfaceOf(paneId));
         // The box text rides along: a box that holds only Collie's own probe characters is no draft. So
         // does whether the read carried no styling: there a draft may be the placeholder (M78 spec 06).
         return send?.tickHolds(
@@ -1762,9 +1933,6 @@ const makeSession: SessionFactory = (name, endpoint, isPrimary) => {
   // never run on one pane at once and every key leaves through the one gate.
   const locks = new SessionLocks();
   const ring = new RowRing();
-  // The pane's foreground read, bounded and shared by the reads of one send (the launch window's and the
-  // profile's version read); absent where the multiplexer has none (tmux, zellij, tuios).
-  const foregroundRead = sharedForegroundRead(herdr.foregroundProcesses?.bind(herdr));
   const foregroundHarness = foregroundHarnessOf(foregroundRead, harnessBinaries);
   const paneProfile = (harness: string, paneId?: string): Promise<PaneProfileMatch | null> => sendProfile(harness, paneId, foregroundRead);
   const send =

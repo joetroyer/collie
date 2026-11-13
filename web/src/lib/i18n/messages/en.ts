@@ -57,6 +57,10 @@ export const en = {
   "settings.nav.back": "Back",
 
   // --- settings.theme ---
+  // The opening of Settings → Appearance (components/appearance-intro.tsx).
+  "settings.appearance.intro.title": "Make Collie your own",
+  "settings.appearance.intro.body": "Pick a theme for the colours, the shape and the character in the header, then light or dark.",
+  "settings.appearance.intro.docs": "How themes work",
   "settings.theme.title": "Appearance",
   "settings.theme.description": "Follow your phone, or pin one.",
   "settings.theme.option.system": "System",
@@ -65,7 +69,7 @@ export const en = {
 
   // --- theme (the picker, the importer; M57) ---
   "theme.title": "Theme",
-  "theme.description": "Pick a look, or import one from a file.",
+  "theme.description": "Pick a look, or add one and try it before you keep it.",
   "theme.import": "Import",
   "theme.export": "Export",
   "theme.remove": "Remove",
@@ -81,6 +85,12 @@ export const en = {
   "theme.preview.shape": "Shape",
   "theme.preview.shape.sample": "Sample",
   "theme.preview.ansi": "Terminal colours",
+  "theme.preview.mark": "Character: {name}",
+  "theme.preview.glyphs": "Icons: {name}",
+  "theme.fallback.glyphs": "This Collie does not have the icon set {word}; it shows the standard icons.",
+  "theme.fallback.character": "This Collie does not have the character {word}; it shows the standard character.",
+  "theme.fallback.ground": "This Collie does not know {word} for {path}; it uses the standard one.",
+  "theme.fallback.font": "This Collie does not have the typeface {word}; it uses the standard one.",
   "theme.preview.contrast.pass": "Every contrast check passes.",
   "theme.preview.contrast.fail": "{half}: {check} measures {ratio}. The floor is {floor}.",
   "theme.preview.contrast.more": "and {count} more checks fail",
@@ -89,7 +99,68 @@ export const en = {
   "theme.library.full": "You already hold {count} imported themes. Remove one, then import again.",
   "theme.library.duplicate": "A theme with this id is already imported. Remove it first, or change \"id\" in the file.",
   "theme.library.invalid": "This theme did not pass the check. Pick the file again.",
+  "theme.update.invalid": "The new version did not pass the check, so your current theme is unchanged.",
+  "theme.update.duplicate": "The new version has the id of another theme you kept, so your current theme is unchanged.",
+  "theme.update.reserved-id": "The new version has the id of a shipped theme, so your current theme is unchanged.",
+  "theme.update.storage": "This device could not save the new version, so your current theme is unchanged.",
+  "theme.update.changed": "This theme changed after About checked it, so your current theme is unchanged; open About again.",
   "theme.export.title": "Copy this theme",
+  // Paste a theme (M59 spec 04).
+  "theme.paste": "Paste",
+  "theme.paste.title": "Paste a theme",
+  "theme.paste.label": "The text of a theme file",
+  "theme.paste.hint": "Paste the JSON text of a theme file. Read shows the same preview as Import.",
+  "theme.paste.read": "Read",
+  "theme.paste.refusal.link": "Collie does not fetch a theme from a link. Open the link, copy the text of the file, and paste that.",
+  // Browse community themes (M59 spec 06).
+  "theme.browse": "Browse community themes",
+  "theme.browse.title": "Community themes",
+  "theme.browse.intro": "Themes people share on GitHub with the topic colliepwa-theme. The site, this host and this phone each check every file, and a theme can only change colours and words.",
+  "theme.browse.loading": "Reading the list on this host…",
+  "theme.browse.age": "List fetched {age}.",
+  "theme.browse.never": "This host has not fetched the list yet.",
+  "theme.browse.refresh": "Refresh",
+  "theme.browse.refreshing": "Fetching…",
+  "theme.browse.refreshNote": "Refresh asks this host to fetch the list from colliepwa.dev once.",
+  "theme.browse.empty": "The list has no themes yet.",
+  "theme.browse.dropped": "Left out because they failed the check: {count}.",
+  "theme.browse.error.fetch-failed": "The host could not fetch the list. It shows the list it had.",
+  "theme.browse.error.too-big": "The list was too big. The host kept the list it had.",
+  "theme.browse.error.bad-registry": "The list was not in a shape this Collie reads. The host kept the list it had.",
+  "theme.browse.error.read": "Could not read the list on this host. Check the connection and try again.",
+  "theme.browse.error.write": "Only a device that may write can ask the host to fetch the list.",
+  "theme.browse.older": "This host runs an older Collie without the community list. Update Collie to use it.",
+  "theme.browse.needsNewer": "Needs a newer Collie. Update Collie to install it.",
+  "theme.browse.install": "Install",
+  "theme.browse.owner": "@{owner}",
+  "theme.preview.from": "From {repo}",
+  "theme.about.aria": "About {name}",
+  "theme.about.title": "About this theme",
+  "theme.about.repo": "Repository",
+  "theme.about.repoLink": "@{repo}",
+  "theme.about.path": "File",
+  "theme.about.commit": "Commit",
+  "theme.about.installed": "Installed",
+  "theme.about.file": "Added from a file on {date}.",
+  "theme.about.paste": "Pasted on {date}.",
+  "theme.about.device": "Added on this device.",
+  "theme.about.newer": "A newer version is listed.",
+  "theme.about.update": "Update",
+  "theme.about.check": "Check for updates",
+  "theme.about.checkNote": "A check asks this host to fetch the list from colliepwa.dev once.",
+  "theme.about.current": "No newer version is listed.",
+  "theme.about.unlisted": "No longer listed. Your installed copy keeps working.",
+  "theme.about.needsNewer": "The listed version needs a newer Collie. Update Collie to get it; this copy keeps working.",
+  "theme.browse.stars": "★ {count}",
+  "theme.browse.starsAria": "Stars on GitHub: {count}",
+  "theme.browse.report": "Report",
+  "theme.browse.reportAria": "Report {name} on GitHub",
+  // Try a theme (M59 spec 08).
+  "theme.trial.try": "Try",
+  "theme.trial.trying": "Trying {name}",
+  "theme.trial.keep": "Keep",
+  "theme.trial.back": "Back",
+  "theme.trial.region": "Theme trial",
   "theme.refusal.size": "This file is too big for a theme.",
   "theme.refusal.json": "This file is not a JSON object.",
   "theme.refusal.version": "This file uses a theme version this Collie does not read.",
@@ -102,6 +173,11 @@ export const en = {
   "theme.refusal.no-half": "The file sets no colours.",
   "theme.refusal.surface": "A shape word is not valid.",
   "theme.refusal.ansi": "A terminal colour is not valid, or it fails its contrast floor.",
+  "theme.refusal.mark": "The character choice is not valid.",
+  "theme.refusal.unreadable": "The text of this theme cannot be read.",
+  "theme.refusal.glyphs": "The icon set choice is not valid.",
+  "theme.refusal.version-newer": "This file was made for a newer Collie (version {version}). Update Collie to use it.",
+  "theme.refusal.contrast": "{ink} on {ground} measures {ratio}. It needs at least {floor}.",
   "theme.refusal.reserved-id": "This id belongs to a shipped theme. Change \"id\" in the file to import your copy.",
 
   // --- settings.haptics ---
@@ -288,6 +364,9 @@ export const en = {
   "settings.updateBanner.copyAria": "Copy command: {command}",
   "settings.updateBanner.bundleProgress": "{percent}% downloaded",
   "settings.updateBanner.bundleReloads": "It reloads on its own once nothing is in progress.",
+  // The "card" look of the update line (2026-11-09), English only until the translation pass: listed
+  // in PENDING_TRANSLATION below.
+  "settings.updateBanner.updateNow": "Update now",
 
   // --- settings.typeface (the APP's own face — a per-device preference since ADR 0033) ---
   // FAMILY NAMES ARE NOT HERE, and must not be added: "Space Grotesk" and "Aldrich" are proper
@@ -307,6 +386,8 @@ export const en = {
   "settings.typeface.note.geist": "Plain and geometric, with a real bold.",
   // Atkinson Hyperlegible Next has a real 400-700 axis, so unlike Aldrich its bold is drawn.
   "settings.typeface.note.atkinson": "Made for low vision, with clear letters and a real bold.",
+  // Nunito has a real 400 to 700 axis, so unlike Aldrich its bold is drawn.
+  "settings.typeface.note.nunito": "Soft and rounded, with a real bold.",
   "settings.typeface.note.operator": "Added by this collie's operator.",
   // --- settings.math (which engine typesets LaTeX in Markdown — a per-device preference) ---
   "settings.math.title": "Math",
@@ -316,8 +397,7 @@ export const en = {
   "settings.math.note.off": "Dollar signs stay text. Downloads nothing.",
   "settings.math.note.katex": "Fast and compact. Loads its fonts on first use.",
   "settings.math.note.mathjax": "Broader TeX support, drawn as SVG. A larger download.",
-  // The math pack on the host (ADR 0132). English only until the translation pass: every key here is
-  // listed in PENDING_TRANSLATION below.
+  // The math pack on the host (ADR 0132).
   "settings.appearance.math.download": "Download the math engines (about {size})",
   "settings.appearance.math.downloadNote": "One download holds both engines. The host keeps it for every device.",
   "settings.appearance.math.downloading": "Downloading the math engines to the host…",
@@ -417,6 +497,8 @@ export const en = {
   "composer.voice.sendToHostAria": "Send the recording to the host to transcribe",
   "composer.mic.discardAria": "Discard recording",
   "composer.attach.aria": "Attach file",
+  "composer.expand": "Expand",
+  "composer.collapse": "Collapse",
   "composer.attach.title": "Attach",
   "composer.attach.photos": "Photos",
   "composer.attach.files": "Files",
@@ -1955,6 +2037,8 @@ export const en = {
   "apiError.update.none_available": "There is no newer release to take.",
   "apiError.update.peers_packaged": "{name} is a packaged install. Its updates come from its own package manager.",
   "apiError.update.packaged": "Updates come from your package manager. Collie won't replace this install's files.",
+  "apiError.update.dev_lead": "This machine runs a development build. It cannot lead an update. Deploy it from its checkout.",
+  "apiError.update.manager_unreachable": "The update could not start: the service manager did not answer. Run `collie update` in a shell on this machine.",
   "apiError.update.start_failed": "The update couldn't be started: {reason}",
   "apiError.update.request_id_required": "This action needs a request ID. Nothing was started.",
   "apiError.update.rollback_unavailable": "There's no previous build on this machine to roll back to.",
@@ -3118,6 +3202,8 @@ export const en = {
   "telemetry.card.next.aria": "The next message, as JSON",
   "telemetry.card.more": "What is sent",
   "telemetry.notice.body": "Collie 1.27.0 sends anonymous telemetry once a day. Turn it off in Settings.",
+  "telemetry.notice.updateBody": "Collie's daily count now also names a dialog it could not read, by a short code made from the dialog's key hints, never from your text.",
+  "telemetry.notice.docs": "What is sent",
   "telemetry.notice.open": "Open Settings",
   "telemetry.notice.dismiss": "Dismiss notice",
   "apiError.telemetry.setting_invalid": "The telemetry setting must be On or Off. Nothing was changed.",
@@ -3184,7 +3270,13 @@ export type Messages = typeof en;
  * already carries, so the list cannot outlive its translations. Never a way to skip translating a
  * key for good: a key stays here only between a feature and its translation pass.
  */
-export const PENDING_TRANSLATION = [] as const satisfies readonly MessageKey[];
+export const PENDING_TRANSLATION = [
+  // A development build cannot lead an update (2026-11-09).
+  "apiError.update.dev_lead",
+  // A supervised bridge whose service manager did not answer starts no update (1.28.1).
+  "apiError.update.manager_unreachable",
+  "settings.updateBanner.updateNow",
+] as const satisfies readonly MessageKey[];
 
 /** A key a bundle may leave out until the translation pass. */
 export type PendingKey = (typeof PENDING_TRANSLATION)[number];

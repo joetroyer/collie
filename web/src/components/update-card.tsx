@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowUpCircle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { Icon } from "@/components/icons/icon";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,7 +39,7 @@ import {
   runInFlight,
   subscribeUpdateStarted,
 } from "@/lib/update-ribbon";
-import { legStillFailed, memberBehind } from "@/lib/crew-level";
+import { leadLevelsCrew, legStillFailed, memberBehind } from "@/lib/crew-level";
 import { BUILD } from "@/lib/build";
 import { earlierRunOnHand } from "@/lib/update-screen";
 import { cn } from "@/lib/utils";
@@ -190,8 +190,11 @@ export function UpdateCard() {
   const legs = [...reading.legs];
   const rows = peerRows(census, legs, current);
   const hasPeers = rows.length > 0 || crewLead;
-  const behind = peersBehind(census, current);
-  const rolledBack = peersRolledBack(legs, census, current);
+  // A lead on a development build can hand nobody a turn, so it offers no crew run at all: the
+  // members behind it and the legs that failed are nothing a tap here could clear (2026-11-09).
+  const levelsCrew = leadLevelsCrew(snapshot?.build ?? check?.build);
+  const behind = levelsCrew ? peersBehind(census, current) : 0;
+  const rolledBack = levelsCrew ? peersRolledBack(legs, census, current) : 0;
   // A packaged install never takes an update from here (ADR 0035): the root is not writable, the CLI
   // refuses, and `POST /api/update` would do nothing but relay that refusal. Read HERE, above the
   // action, because it is one of the facts that decides which action there is — not merely whether
@@ -338,9 +341,9 @@ export function UpdateCard() {
     <Card className="gap-0 py-0">
       <div className="flex items-start gap-3 p-4">
         {upToDate ? (
-          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-status-done" />
+          <Icon name="success" className="mt-0.5 size-5 shrink-0 text-status-done" />
         ) : (
-          <ArrowUpCircle className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+          <Icon name="update-available" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
         )}
         <div className="min-w-0 flex-1">
           <div className="font-medium">{t("settings.updateCard.title")}</div>
@@ -435,7 +438,7 @@ export function UpdateCard() {
                     )
                   }
                 >
-                  {pending && <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin" />}
+                  {pending && <Icon name="busy" aria-hidden="true" className="size-4 shrink-0 animate-spin" />}
                   {pending ? t("settings.updateCard.checking") : crewActionLabel(action, latest ?? current, retryNames)}
                 </Button>
               )}
@@ -525,7 +528,7 @@ export function UpdateCard() {
                   openUpdateMode({ kind: "rollback", version: rollback.to, major: false, peersOnly: false, current: rollback.from })
                 }
               >
-                <RotateCcw className="size-4" />
+                <Icon name="rollback" className="size-4" />
                 {t("settings.updateCard.rollback.action", { version: rollback.to })}
               </Button>
             </div>
@@ -714,7 +717,7 @@ function PeerSection({
         {rows.map((row) => (
           <li key={row.name} className="flex items-start gap-2 text-xs">
             {row.inFlight ? (
-              <Loader2 aria-hidden="true" className="mt-0.5 size-3 shrink-0 animate-spin text-status-working" />
+              <Icon name="busy" aria-hidden="true" className="mt-0.5 size-3 shrink-0 animate-spin text-status-working" />
             ) : (
               <span
                 aria-hidden="true"
@@ -757,7 +760,7 @@ function PeerSection({
             })}
           </p>
           <Button variant="outline" size="sm" onClick={onRetry}>
-            <RotateCcw className="size-4" />
+            <Icon name="retry" className="size-4" />
             {t("settings.updateCard.retryNow")}
           </Button>
         </div>
@@ -919,7 +922,7 @@ function RunSection({ run, onRetry }: { run: UpdateRun; onRetry: () => void }) {
         )}
         role="status"
       >
-        {inFlight && <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />}
+        {inFlight && <Icon name="busy" className="mt-0.5 size-4 shrink-0 animate-spin" />}
         <span className="min-w-0">{rollback ? rollbackLine(run, version, still, restartOver) : stateLine(run, version, still, restartOver)}</span>
       </div>
 
@@ -974,7 +977,7 @@ function RunSection({ run, onRetry }: { run: UpdateRun; onRetry: () => void }) {
 
       {!rollback && !failedEdge && (run.state === "rolled-back" || run.state === "interrupted") && (
         <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
-          <RotateCcw className="size-4" />
+          <Icon name="retry" className="size-4" />
           {t("settings.updateCard.retry")}
         </Button>
       )}

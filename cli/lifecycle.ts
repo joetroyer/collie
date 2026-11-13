@@ -1,6 +1,10 @@
 import { join } from "node:path";
 
 import type { Host } from "../bridge/host.ts";
+import {
+  systemdUserSession as probeSystemdUser,
+  type SystemdUserSession,
+} from "../bridge/systemd-user.ts";
 import type { CrewMode } from "../bridge/types.ts";
 import { ensureBuild } from "./build.ts";
 import { collieVersion, type CliContext, type Environment, type EnvVars } from "./context.ts";
@@ -22,6 +26,7 @@ import {
   isTaskLauncher,
   parseTaskRecord,
   queryTask,
+  TASK_QUERY_PATIENT_MS,
   taskOwner,
   type TaskRecord,
   taskRecordPath,
@@ -124,43 +129,28 @@ export type Tier = "systemd" | "launchd" | "taskscheduler" | "unsupervised";
 
 const TIERS: readonly Tier[] = ["systemd", "launchd", "taskscheduler", "unsupervised"];
 
-/** `/run/user/<uid>`, and its bus socket when `withBus`. See {@link systemdUserReachable}. */
-function derivedSessionEnv(uid: number, withBus: boolean): EnvVars {
-  const runtimeDir: EnvVars = { XDG_RUNTIME_DIR: `/run/user/${uid}` };
-  if (!withBus) return runtimeDir;
-  return { ...runtimeDir, DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${uid}/bus` };
+/**
+ * The CLI's {@link Exec}-shaped adapter over the shared probe (`bridge/systemd-user.ts`). The rule
+ * itself lives there because the bridge's update spawn needs the same answer; this wrapper only
+ * turns the `Exec` seam into a probe. See the module for why "the binary exists" is not the
+ * question and why a Herdr action's bare environment gets one retry with the derived session dir
+ * (#194).
+ */
+export function systemdUserSession(exec: Exec, env: Environment = {}): SystemdUserSession {
+  return probeSystemdUser(
+    (envAdd) => exec.capture("systemctl", ["--user", "show-environment"], undefined, envAdd ?? undefined),
+    env,
+    process.getuid?.() ?? 0,
+  );
 }
 
 /**
  * Whether the systemd user manager is actually reachable — `systemctl --user show-environment`
- * succeeding, not merely `systemctl`/`systemd-run` existing on disk. A container commonly ships
- * the systemd package (so the binaries are on `PATH`) without ever running a user instance or
- * session bus, and `capture` fails distinctly from "not found": found, nonzero, `$DBUS_SESSION_BUS_
- * ADDRESS` unset. Exported so every caller that needs "can I actually ask systemd to do something"
- * — not just "is a binary present" — asks the same question the same way; `cli/update.ts`'s
- * `handOff` learned the difference the hard way, retrying a doomed `systemd-run` forever.
- *
- * `systemctl --user` locates the manager through `XDG_RUNTIME_DIR` (or `DBUS_SESSION_BUS_ADDRESS`)
- * in `env`. A Herdr plugin action injects neither (`HERDR_SOCKET_PATH` / `HERDR_PLUGIN_CONFIG_DIR`
- * and nothing else — no login shell), so a healthy host would fail this probe and read as
- * "unsupervised" on that spawn path alone (#194). When `env` lacks `XDG_RUNTIME_DIR`, a failed
- * first probe is retried once with a derived default (`/run/user/<uid>`, plus a derived
- * `DBUS_SESSION_BUS_ADDRESS` when that is ALSO unset) layered under the probe's own env via
- * {@link Exec.capture}'s `envAdd` — never into `process.env`, and never overriding a name `env`
- * already carries, so an operator's own value (or the `.env` workaround) still wins. The container
- * case is preserved: with no user manager at all, the retry fails too, and this still reports false.
+ * succeeding, not merely `systemctl`/`systemd-run` existing on disk. `cli/update.ts`'s `handOff`
+ * learned the difference the hard way, retrying a doomed `systemd-run` forever.
  */
 export function systemdUserReachable(exec: Exec, env: Environment = {}): boolean {
-  const probe = exec.capture("systemctl", ["--user", "show-environment"]);
-  if (probe.found && probe.code === 0) return true;
-  if (env.XDG_RUNTIME_DIR !== undefined) return false;
-  const uid = process.getuid?.() ?? 0;
-  const envAdd =
-    env.DBUS_SESSION_BUS_ADDRESS === undefined
-      ? derivedSessionEnv(uid, true)
-      : derivedSessionEnv(uid, false);
-  const retried = exec.capture("systemctl", ["--user", "show-environment"], undefined, envAdd);
-  return retried.found && retried.code === 0;
+  return systemdUserSession(exec, env).reachable;
 }
 
 /**
@@ -573,9 +563,16 @@ function registerTask(deps: LifecycleDeps): boolean {
   if (runLevel === null) return false;
   // One Collie per Windows machine. A task of this name that runs another install is that install's,
   // and registering over it would silently take its bridge away: refuse, and name it.
-  const existing = queryTask(deps.exec, taskName(deps), deps.host);
-  if (existing !== null && existing !== undefined && taskOwner(existing, deps.ctx.root, deps.host) === "foreign") {
-    deps.io.err(`error: the task ${taskName(deps)} runs ${existing.program}, not this Collie (${deps.ctx.root})`);
+  // A query that could not be answered is not "no task": registering over a task we could not read
+  // may take another install's bridge away, so it stops here and says so (#762).
+  const existing = queryTask(deps.exec, taskName(deps), deps.host, TASK_QUERY_PATIENT_MS);
+  if (existing.kind === "unknown") {
+    deps.io.err(`error: Collie could not read the task ${taskName(deps)} (${existing.why}), so it did not register over it`);
+    deps.io.err("       wait a minute and run: collie start");
+    return false;
+  }
+  if (existing.kind === "found" && taskOwner(existing.task, deps.ctx.root, deps.host) === "foreign") {
+    deps.io.err(`error: the task ${taskName(deps)} runs ${existing.task.program}, not this Collie (${deps.ctx.root})`);
     deps.io.err("       one Collie per Windows machine: run `collie uninstall` from that install first");
     return false;
   }
@@ -617,14 +614,18 @@ function registerTask(deps: LifecycleDeps): boolean {
  * before 1.20.0 carry no priority, so Task Scheduler runs them at 7, below normal apps, and Windows
  * pages the bridge out first under memory pressure. `restart` is where `collie update` ends, through
  * the new binary, so every update repairs the task. A task already at 4 costs one query and nothing
- * else; a PowerShell that cannot answer changes nothing. Registering replaces the definition and
+ * else; a query that cannot answer changes nothing but one line saying so (#762). Registering replaces the definition and
  * leaves the running launcher alone, but a process keeps the priority it started with and the bridge
  * inherits it from the launcher, so the running one carries the old priority until `stop` and `start`
  * (or the next logon) starts a new launcher: the one line printed here says so.
  */
 function renewTaskPriority(deps: LifecycleDeps): void {
-  const query = queryTask(deps.exec, taskName(deps), deps.host);
-  if (query === undefined || (query !== null && query.priority === TASK_PRIORITY)) return;
+  const query = queryTask(deps.exec, taskName(deps), deps.host, TASK_QUERY_PATIENT_MS);
+  if (query.kind === "unknown") {
+    deps.io.err(`could not read the task ${taskName(deps)} (${query.why}), so its priority was not checked`);
+    return;
+  }
+  if (query.kind === "found" && query.task.priority === TASK_PRIORITY) return;
   if (!registerTask(deps)) return;
   deps.io.out("the task now runs Collie at normal priority; the running launcher keeps its old one until you run `collie stop` and `collie start`");
 }
@@ -944,12 +945,14 @@ function taskBridgeSilent(deps: LifecycleDeps, waitS: number): number {
 function describeTaskScheduler(deps: LifecycleDeps): string {
   const name = taskName(deps);
   const head = `Task Scheduler (${name})`;
-  const query = queryTask(deps.exec, name, deps.host);
-  if (query === undefined) return `${head} · unknown`;
-  if (query === null) {
+  const lookup = queryTask(deps.exec, name, deps.host, TASK_QUERY_PATIENT_MS);
+  // Not "not registered": the query did not answer, so Collie does not know (#762).
+  if (lookup.kind === "unknown") return `${head} · could not read the task (${lookup.why})`;
+  if (lookup.kind === "absent") {
     const pid = deps.files.read(pidFilePath(deps.ctx.configDir, deps.ctx.instance))?.trim();
     return pid !== undefined ? `pid ${pid} (unsupervised)` : `${head} · not registered`;
   }
+  const query = lookup.task;
   const status = `${head} · ${query.state}`;
   switch (taskOwner(query, deps.ctx.root, deps.host)) {
     case "legacy":

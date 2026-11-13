@@ -155,6 +155,50 @@ it("never submits an incomplete review or a question with two saved single-choic
   expect(detectAskSelect(doubled)).toBeNull();
 });
 
+// omp 18.18 paints the current question tab with a background and no bold (captured over tmux
+// `capture-pane -e`, omp 18.18.2). The reader takes the one wholly painted label as the step.
+it("reads an omp 18.18 batch, whose current tab has a background and no bold", () => {
+  const first = detectAskSelect(load("omp--v18-18-2-ask-batch--w120.txt"));
+  expect(first?.question).toBe("Which fruit?");
+  expect(first?.caption).toBe("Ask (1/3) · Fruit");
+  expect(first?.options.map((option) => option.label)).toEqual(["Apple", "Pear", "Plum", OTHER, "Cancel"]);
+  const moved = detectAskSelect(load("omp--v18-18-2-ask-batch-moved--w120.txt"));
+  expect(moved?.coreSignature).toBe(first?.coreSignature);
+  expect(moved?.options.find((option) => option.label === "Pear")?.keys).toEqual(["Enter"]);
+  expect(detectAskSelect(load("omp--v18-18-2-ask-batch-second--w120.txt"))?.caption).toBe("Ask (2/3) · Color");
+  expect(detectAskSelect(load("omp--v18-18-2-ask-batch-third--w120.txt"))?.question).toBe("Which size?");
+  const review = detectAskSelect(load("omp--v18-18-2-ask-batch-review--w120.txt"));
+  expect(review?.question).toBe("Review answers\n1. Fruit: Pear\n2. Color: Red\n3. Size: Small");
+  expect(review?.options.map((option) => option.keys)).toEqual([["Enter"], ["Escape"]]);
+});
+
+it("never submits an omp 18.18 review that still has unanswered questions", () => {
+  const lines = load("omp--v18-18-2-ask-batch-review-unanswered--w120.txt");
+  expect(detectAskSelect(lines)).toBeNull();
+  // Without the warning row the `unanswered` marks alone still decline.
+  expect(detectAskSelect(lines.filter((line) => !lineText(line).includes("still submits")))).toBeNull();
+});
+
+it("declines an omp 18.18 tab strip unless the background covers exactly one whole label", () => {
+  const lines = load("omp--v18-18-2-ask-batch--w120.txt");
+  expect(detectAskSelect(lines)).not.toBeNull();
+  const paint = lines[1]!.segments.find((segment) => segment.bg !== undefined)!.bg;
+
+  const two = structuredClone(lines);
+  for (const segment of two[1]!.segments) if (segment.text.trim() === "Color") segment.bg = paint;
+  expect(detectAskSelect(two)).toBeNull();
+
+  const border = structuredClone(lines);
+  for (const segment of border[1]!.segments) if (segment.text.includes("│")) segment.bg = paint;
+  expect(detectAskSelect(border)).toBeNull();
+
+  const part = structuredClone(lines);
+  const at = part[1]!.segments.findIndex((segment) => segment.bg !== undefined);
+  const whole = part[1]!.segments[at]!;
+  part[1]!.segments.splice(at, 1, { ...whole, text: " Fr" }, { ...whole, text: "uit ", bg: undefined });
+  expect(detectAskSelect(part)).toBeNull();
+});
+
 it("declines unknown controls after the current footer instead of guessing their meaning", () => {
   const lines = textsOf("omp--v18-10-ask-single.txt");
   expect(detectAskSelect(fromTexts(lines))).not.toBeNull();
@@ -282,6 +326,84 @@ describe("the Nerd Font preset (18.4.4) lifts, read from its own glyphs", () => 
     const a = detectAskSelect(load("omp--select-menu-other.txt"))!;
     expect(a.coreSignature).not.toContain("\u{F054}");
     expect(a.signature).toContain("\u{F054}");
+  });
+});
+
+// omp 18.18.0 under `symbolPreset: nerd` (2026-11-08, omp/keycaps.ts): a batch of two questions. The tab
+// segment's keycap is U+F0312, a saved answer is U+F192, the review's pointer is U+F054.
+describe("the Nerd Font preset in a batch (18.18.0) lifts each step and the review", () => {
+  /** The lines with one glyph swapped in every segment, the styles kept, for the mixed-preset controls.
+   *  With `onLine`, only on the rows whose text holds it. */
+  const swapped = (name: string, from: string, to: string, onLine?: string): StyledLine[] => {
+    const lines = structuredClone(load(name));
+    for (const line of lines) {
+      if (onLine !== undefined && !lineText(line).includes(onLine)) continue;
+      for (const segment of line.segments) segment.text = segment.text.replaceAll(from, to);
+    }
+    return lines;
+  };
+
+  it("the first question: its tab in the caption, the walk from the chevron, Cancel as Escape", () => {
+    const model = detectAskSelect(load("omp--v18-18-0-nerd-ask-batch--w250.txt"))!;
+    expect(model.caption).toBe("Ask (1/2) · color");
+    expect(model.question).toBe("Which color do you prefer?");
+    expect(model.options).toEqual([
+      { label: "red", keys: ["Enter"], keyLabel: "❯" },
+      { label: "green", keys: ["Down", "Enter"], keyLabel: "" },
+      { label: OTHER, keys: ["Down", "Down", "Enter"], keyLabel: "" },
+      { label: "Cancel", keys: ["Escape"], keyLabel: "Esc" },
+    ]);
+  });
+
+  it("the second question is told apart from the first by its tab", () => {
+    const model = detectAskSelect(load("omp--v18-18-0-nerd-ask-batch-q2--w250.txt"))!;
+    expect(model.caption).toBe("Ask (2/2) · pet");
+    expect(model.options.map((o) => o.label)).toEqual(["cat", "dog", OTHER, "Cancel"]);
+  });
+
+  it("a revisited question shows its saved answer (U+F192) and still lifts, one saved answer at most", () => {
+    const name = "omp--v18-18-0-nerd-ask-batch-saved--w250.txt";
+    const model = detectAskSelect(load(name))!;
+    expect(model.caption).toBe("Ask (2/2) · pet");
+    expect(model.options.map((o) => [o.label, o.keys])).toEqual([
+      ["cat", ["Enter"]],
+      ["dog", ["Down", "Enter"]],
+      [OTHER, ["Down", "Down", "Enter"]],
+      ["Cancel", ["Escape"]],
+    ]);
+    expect(detectAskSelect(swapped(name, "\u{F10C}", "\u{F192}", " dog"))).toBeNull();
+    // The unicode saved mark under nerd rows is a screen omp never draws.
+    expect(detectAskSelect(swapped(name, "\u{F192}", "◉"))).toBeNull();
+  });
+
+  it("the complete review: every answer on the card, Submit as Enter alone", () => {
+    const model = detectAskSelect(load("omp--v18-18-0-nerd-ask-review--w250.txt"))!;
+    expect(model.question).toBe("Review answers\n1. color: red\n2. pet: cat");
+    expect(model.options).toEqual([
+      { label: "Submit", keys: ["Enter"], keyLabel: "⏎" },
+      { label: "Cancel", keys: ["Escape"], keyLabel: "Esc" },
+    ]);
+  });
+
+  it("the review with every question unanswered declines, as in `unicode`", () => {
+    expect(detectAskSelect(load("omp--v18-18-0-nerd-ask-review-unanswered--w250.txt"))).toBeNull();
+  });
+
+  it.each([
+    ["the unicode tab keycap in the nerd footer", "omp--v18-18-0-nerd-ask-batch--w250.txt", "\u{F0312}", "⇥"],
+    ["the unicode pointer under the nerd footer", "omp--v18-18-0-nerd-ask-batch--w250.txt", "\u{F054}", "❯"],
+    ["the unicode Submit pointer under the nerd review footer", "omp--v18-18-0-nerd-ask-review--w250.txt", "\u{F054}", "❯"],
+    ["the unicode enter keycap in the nerd review footer", "omp--v18-18-0-nerd-ask-review--w250.txt", "\u{F0311}", "⏎"],
+  ])("%s declines: a screen omp never draws", (_name, name, from, to) => {
+    expect(detectAskSelect(load(name))).not.toBeNull();
+    expect(detectAskSelect(swapped(name, from, to))).toBeNull();
+  });
+
+  it("a batch under the 17.x text keycaps declines: no batch was captured in that dialect", () => {
+    const name = "omp--v18-18-0-nerd-ask-batch--w250.txt";
+    const text = swapped(name, "\u{F0311} select", "Enter select");
+    for (const line of text) for (const segment of line.segments) segment.text = segment.text.replace("\u{F12B7} cancel", "Esc cancel");
+    expect(detectAskSelect(text)).toBeNull();
   });
 });
 
@@ -794,6 +916,15 @@ describe("the grammar claims nothing else in the corpus", () => {
     "omp--v18-10-ask-revisited.txt",
     "omp--v18-16-0-ask-single-glyph-hide--w200.txt",
     "omp--v18-16-0-ask-single-glyph-hide-moved--w200.txt",
+    "omp--v18-18-0-nerd-ask-batch--w250.txt",
+    "omp--v18-18-0-nerd-ask-batch-q2--w250.txt",
+    "omp--v18-18-0-nerd-ask-batch-saved--w250.txt",
+    "omp--v18-18-0-nerd-ask-review--w250.txt",
+    "omp--v18-18-2-ask-batch--w120.txt",
+    "omp--v18-18-2-ask-batch-moved--w120.txt",
+    "omp--v18-18-2-ask-batch-second--w120.txt",
+    "omp--v18-18-2-ask-batch-third--w120.txt",
+    "omp--v18-18-2-ask-batch-review--w120.txt",
   ]);
 
   it("lifts only the supported Ask states in the complete corpus", () => {
